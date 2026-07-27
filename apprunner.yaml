@@ -1,0 +1,12 @@
+version: 1.0
+runtime: docker
+run:
+  network:
+    port: 8000
+  env:
+    - name: PDC_ENVIRONMENT
+      value: production
+    - name: PDC_PUBLIC_BASE_URL
+      value: https://checkins.phoenixvilledems.org
+    - name: PDC_SECURE_COOKIES
+      value: "true"
