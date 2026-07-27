@@ -13,12 +13,14 @@ import {
 import { api, formatMeetingDate, Meeting } from "./api";
 import { Brand, Button, Field } from "./components";
 
-type Step = "email" | "returning" | "new" | "done";
+type Step = "email" | "returning" | "update" | "new" | "done";
 
 export function CheckinPage({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
 
   const meeting = useQuery({
@@ -29,13 +31,21 @@ export function CheckinPage({ token }: { token: string }) {
 
   const lookup = useMutation({
     mutationFn: () =>
-      api<{ found: boolean; first_name?: string; already_checked_in?: boolean }>(
+      api<{
+        found: boolean;
+        first_name?: string;
+        last_name?: string;
+        phone?: string | null;
+        already_checked_in?: boolean;
+      }>(
         `/api/v1/public/meetings/${token}/lookup`,
         { method: "POST", body: JSON.stringify({ email }) },
       ),
     onSuccess(data) {
       if (data.found) {
         setFirstName(data.first_name ?? "");
+        setLastName(data.last_name ?? "");
+        setPhone(data.phone ?? "");
         setAlreadyCheckedIn(Boolean(data.already_checked_in));
         setStep(data.already_checked_in ? "done" : "returning");
       } else {
@@ -45,10 +55,10 @@ export function CheckinPage({ token }: { token: string }) {
   });
 
   const returning = useMutation({
-    mutationFn: () =>
+    mutationFn: (updates: Record<string, string | null> = {}) =>
       api<{ first_name: string }>(`/api/v1/public/meetings/${token}/checkins`, {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, ...updates }),
       }),
     onSuccess(data) {
       setFirstName(data.first_name);
@@ -166,12 +176,46 @@ export function CheckinPage({ token }: { token: string }) {
             <Button
               busy={returning.isPending}
               className="button--wide"
-              onClick={() => returning.mutate()}
+              onClick={() => returning.mutate({})}
             >
               Check me in <Check size={18} />
             </Button>
+            <Button variant="secondary" className="button--wide" onClick={() => setStep("update")}>
+              Update my profile first
+            </Button>
             <button className="text-button" onClick={() => setStep("email")}>
               That isn’t me
+            </button>
+          </>
+        )}
+
+        {step === "update" && (
+          <>
+            <div className="step-label">Update your profile</div>
+            <h1>Is your information still right?</h1>
+            <p className="lede">Update your name or phone number, then we’ll check you in.</p>
+            <form
+              className="form-grid"
+              onSubmit={(event: FormEvent<HTMLFormElement>) => {
+                event.preventDefault();
+                const data = new FormData(event.currentTarget);
+                returning.mutate({
+                  first_name: String(data.get("first_name") ?? ""),
+                  last_name: String(data.get("last_name") ?? ""),
+                  phone: String(data.get("phone") ?? "") || null,
+                });
+              }}
+            >
+              <Field label="First name" name="first_name" defaultValue={firstName} autoComplete="given-name" required autoFocus />
+              <Field label="Last name" name="last_name" defaultValue={lastName} autoComplete="family-name" required />
+              <Field label="Phone (optional)" name="phone" type="tel" defaultValue={phone} autoComplete="tel" placeholder="(610) 555-0123" />
+              <ErrorMessage mutation={returning} />
+              <Button type="submit" busy={returning.isPending} className="button--wide field--full">
+                Save changes & check in <Check size={18} />
+              </Button>
+            </form>
+            <button className="text-button" onClick={() => setStep("returning")}>
+              Back
             </button>
           </>
         )}

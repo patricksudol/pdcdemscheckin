@@ -410,6 +410,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
 function Profiles() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<{ key: "name" | "email" | "phone" | "last_meeting" | "meeting_count" | "created_at"; direction: "asc" | "desc" }>({ key: "name", direction: "asc" });
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<Profile | null>(null);
   const profiles = useQuery({
@@ -435,6 +436,30 @@ function Profiles() {
       setCreating(false);
     },
   });
+  const sortedProfiles = [...(profiles.data ?? [])].sort((left, right) => {
+    const value = (profile: Profile): string | number => {
+      switch (sort.key) {
+        case "name": return `${profile.last_name} ${profile.first_name}`.toLocaleLowerCase();
+        case "email": return (profile.email ?? "").toLocaleLowerCase();
+        case "phone": return profile.phone ?? "";
+        case "last_meeting": return profile.last_meeting_at ? new Date(profile.last_meeting_at).getTime() : 0;
+        case "meeting_count": return profile.meeting_count ?? 0;
+        case "created_at": return new Date(profile.created_at).getTime();
+      }
+    };
+    const leftValue = value(left);
+    const rightValue = value(right);
+    const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+      ? leftValue - rightValue
+      : String(leftValue).localeCompare(String(rightValue));
+    return sort.direction === "asc" ? comparison : -comparison;
+  });
+  const selectSort = (key: typeof sort.key) => {
+    setSort((current) => current.key === key
+      ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: key === "last_meeting" || key === "meeting_count" ? "desc" : "asc" });
+  };
+  const sortLabel = (key: typeof sort.key) => sort.key === key ? (sort.direction === "asc" ? " ↑" : " ↓") : "";
   return (
     <main className="admin-content">
       <div className="title-action">
@@ -444,11 +469,20 @@ function Profiles() {
       <section className="panel">
         <div className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or email…" aria-label="Search profiles" /></div>
         <div className="profile-table">
-          <div className="profile-table__header"><span>Name</span><span>Email</span><span>Phone</span><span>Joined</span></div>
-          {profiles.data?.map((profile) => (
+          <div className="profile-table__header">
+            <button onClick={() => selectSort("name")}>Name{sortLabel("name")}</button>
+            <button onClick={() => selectSort("email")}>Email{sortLabel("email")}</button>
+            <button onClick={() => selectSort("phone")}>Phone{sortLabel("phone")}</button>
+            <button onClick={() => selectSort("last_meeting")}>Last meeting{sortLabel("last_meeting")}</button>
+            <button onClick={() => selectSort("meeting_count")}>Meetings{sortLabel("meeting_count")}</button>
+            <button onClick={() => selectSort("created_at")}>Joined{sortLabel("created_at")}</button>
+          </div>
+          {sortedProfiles.map((profile) => (
             <button className="profile-table__row profile-table__row--button" key={profile.id} onClick={() => setSelected(profile)}>
               <span><div className="avatar">{profile.first_name.charAt(0)}</div><strong>{profile.first_name} {profile.last_name}</strong></span>
               <span>{profile.email || "—"}</span><span>{profile.phone || "—"}</span>
+              <span>{profile.last_meeting_at ? new Date(profile.last_meeting_at).toLocaleDateString() : "—"}</span>
+              <span>{profile.meeting_count ?? 0}</span>
               <span>{new Date(profile.created_at).toLocaleDateString()}</span>
             </button>
           ))}

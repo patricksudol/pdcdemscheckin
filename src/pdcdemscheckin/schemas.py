@@ -31,6 +31,9 @@ class ProfileCreate(ApiModel):
 
 class ExistingCheckin(ApiModel):
     email: EmailStr
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
 
 
 class MeetingCreate(ApiModel):

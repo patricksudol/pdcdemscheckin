@@ -396,7 +396,24 @@ async def remove_checkin(request: Request, checkin_id: UUID):
 async def list_profiles(request: Request):
     query = str(request.args.get("q", "")).strip()
     async with request.app.ctx.db.session() as db:
-        statement = select(Profile).where(Profile.deleted_at.is_(None))
+        meeting_count = (
+            select(func.count(Checkin.id))
+            .where(Checkin.profile_id == Profile.id)
+            .correlate(Profile)
+            .scalar_subquery()
+        )
+        last_meeting_at = (
+            select(func.max(Meeting.starts_at))
+            .join(Checkin, Checkin.meeting_id == Meeting.id)
+            .where(Checkin.profile_id == Profile.id)
+            .correlate(Profile)
+            .scalar_subquery()
+        )
+        statement = select(
+            Profile,
+            meeting_count.label("meeting_count"),
+            last_meeting_at.label("last_meeting_at"),
+        ).where(Profile.deleted_at.is_(None))
         if query:
             pattern = f"%{query}%"
             statement = statement.where(
@@ -408,8 +425,15 @@ async def list_profiles(request: Request):
             )
         profiles = (
             await db.execute(statement.order_by(Profile.last_name, Profile.first_name).limit(200))
-        ).scalars()
-        return [profile_json(profile) for profile in profiles]
+        ).all()
+        return [
+            {
+                **profile_json(profile),
+                "meeting_count": count,
+                "last_meeting_at": last_meeting.isoformat() if last_meeting else None,
+            }
+            for profile, count, last_meeting in profiles
+        ]
 
 
 @admin_bp.post("/profiles")

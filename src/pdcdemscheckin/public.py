@@ -113,6 +113,8 @@ async def lookup_profile(request: Request, token: str):
         return {
             "found": True,
             "first_name": profile.first_name,
+            "last_name": profile.last_name,
+            "phone": profile.phone,
             "already_checked_in": existing is not None,
         }
 
@@ -135,6 +137,14 @@ async def checkin_existing(request: Request, token: str):
         ).scalar_one_or_none()
         if not profile:
             raise NotFound("Profile not found")
+
+        changes = payload.model_dump(exclude={"email"}, exclude_unset=True)
+        for field, value in changes.items():
+            if field in {"first_name", "last_name"}:
+                value = value.strip()
+            elif field == "phone":
+                value = normalize_phone(value)
+            setattr(profile, field, value)
         profile_first_name = profile.first_name
         checkin = Checkin(meeting_id=meeting.id, profile_id=profile.id)
         db.add(checkin)

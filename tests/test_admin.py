@@ -139,6 +139,14 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
             )
         )
 
+    _request, response = await app.asgi_client.get(
+        "/api/v1/admin/profiles", cookies=cookies
+    )
+    assert response.status == 200
+    listed_profile = next(profile for profile in response.json if profile["id"] == profile_id)
+    assert listed_profile["meeting_count"] == 1
+    assert listed_profile["last_meeting_at"].startswith("2026-07-27T23:00:00")
+
     _request, response = await app.asgi_client.request(
         "DELETE",
         f"/api/v1/admin/profiles/{profile_id}",

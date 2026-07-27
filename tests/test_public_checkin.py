@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from pdcdemscheckin.models import Checkin, Profile
@@ -40,6 +42,8 @@ async def test_new_profile_then_returning_checkin_is_idempotent(app, open_meetin
     assert lookup.json == {
         "found": True,
         "first_name": "Ada",
+        "last_name": "Lovelace",
+        "phone": "6105551212",
         "already_checked_in": True,
     }
 
@@ -53,6 +57,40 @@ async def test_new_profile_then_returning_checkin_is_idempotent(app, open_meetin
     async with app.ctx.db.session() as db:
         assert len((await db.scalars(Profile.__table__.select())).all()) == 1
         assert len((await db.scalars(Checkin.__table__.select())).all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_returning_attendee_can_update_profile_while_checking_in(app, open_meeting):
+    async with app.ctx.db.session() as db:
+        profile = Profile(
+            first_name="Ada",
+            last_name="Byron",
+            email="ada@example.com",
+            normalized_email="ada@example.com",
+            phone="6105550100",
+            consented_at=datetime.now(UTC),
+        )
+        db.add(profile)
+        await db.flush()
+        profile_id = profile.id
+
+    _request, response = await app.asgi_client.post(
+        f"/api/v1/public/meetings/{open_meeting.public_token}/checkins",
+        json={
+            "email": "ada@example.com",
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "phone": "(610) 555-1212",
+        },
+    )
+    assert response.status == 200
+    assert response.json["created"] is True
+    assert response.json["first_name"] == "Ada"
+
+    async with app.ctx.db.session() as db:
+        profile = await db.get(Profile, profile_id)
+        assert profile.last_name == "Lovelace"
+        assert profile.phone == "6105551212"
 
 
 @pytest.mark.asyncio

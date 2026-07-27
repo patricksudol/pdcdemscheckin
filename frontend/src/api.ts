@@ -19,6 +19,8 @@ export interface Profile {
   phone: string | null;
   consented_at: string;
   created_at: string;
+  meeting_count?: number;
+  last_meeting_at?: string | null;
 }
 
 export interface Checkin {

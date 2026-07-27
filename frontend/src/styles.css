@@ -189,8 +189,10 @@ h2 { font-size: 1.8rem; }
 .search-box { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.4rem; border-bottom: 1px solid #e9edf0; }
 .search-box svg { color: var(--muted); }
 .search-box input { border: 0; outline: 0; flex: 1; font-size: .95rem; }
-.profile-table__header, .profile-table__row { display: grid; grid-template-columns: 1.2fr 1.5fr 1fr .7fr; gap: 1rem; align-items: center; padding: .9rem 1.4rem; border-bottom: 1px solid #edf0f2; }
+.profile-table__header, .profile-table__row { display: grid; grid-template-columns: 1.2fr 1.5fr 1fr .95fr .65fr .7fr; gap: 1rem; align-items: center; padding: .9rem 1.4rem; border-bottom: 1px solid #edf0f2; }
 .profile-table__header { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; background: #fbfcfc; }
+.profile-table__header button { appearance: none; background: transparent; border: 0; color: inherit; cursor: pointer; font: inherit; letter-spacing: inherit; padding: 0; text-align: left; text-transform: inherit; white-space: nowrap; }
+.profile-table__header button:hover, .profile-table__header button:focus-visible { color: var(--navy); }
 .profile-table__row { font-size: .82rem; color: #536173; }
 .profile-table__row--button { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .profile-table__row--button:hover { background: #f7f9fa; }
