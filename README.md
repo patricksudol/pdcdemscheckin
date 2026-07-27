@@ -121,31 +121,17 @@ The `-N` option creates only the tunnel, so a blank Blink screen is normal. Keep
 while using Safari; iPadOS may suspend the tunnel if Blink is force-closed. Port 8080 is the
 iPad-side port, while port 8000 is the Hetzner-side application port.
 
-## Google organizer sign-in
+## Organizer sign-in
 
-Public splash and check-in pages work without Google configuration. The organizer dashboard
-requires a Google OAuth web client.
-
-For local development, register this authorized redirect URI:
-
-```text
-http://localhost:8000/api/v1/auth/callback
-```
-
-For production, register:
-
-```text
-https://checkins.phoenixvilledems.org/api/v1/auth/callback
-```
-
-Set these values in `.env`:
+Organizer access uses email and password credentials. For local development, set the seeded
+test account in `.env`:
 
 ```dotenv
 PDC_PUBLIC_BASE_URL=http://localhost:8000
 PDC_SESSION_SECRET=generate-a-long-random-value
-PDC_GOOGLE_CLIENT_ID=your-client-id
-PDC_GOOGLE_CLIENT_SECRET=your-client-secret
-PDC_ADMIN_ALLOWLIST=first.organizer@example.com,second.organizer@example.com
+PDC_SEED_ADMIN_EMAIL=admin@pdc.test
+PDC_SEED_ADMIN_PASSWORD=demo2026
+PDC_SEED_ADMIN_NAME=Test Organizer
 ```
 
 Generate a session secret with:
@@ -154,15 +140,15 @@ Generate a session secret with:
 openssl rand -hex 32
 ```
 
-Restart after configuration changes:
+The seed command only creates the organizer when that email does not already exist. Restart after
+configuration changes:
 
 ```bash
 docker compose up -d --force-recreate app
 ```
 
-The first allowlisted organizer to sign in becomes the owner. Later allowlisted accounts become
-admins. On the HTTP local stack, Compose deliberately sets secure cookies off. Production must use
-HTTPS and `PDC_SECURE_COOKIES=true`.
+On the HTTP local stack, Compose deliberately sets secure cookies off. Production must use HTTPS,
+strong credentials stored as secrets, and `PDC_SECURE_COOKIES=true`.
 
 ## Native development without Docker
 

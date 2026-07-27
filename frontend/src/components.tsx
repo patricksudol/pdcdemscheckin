@@ -1,16 +1,15 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
+import pdcLogoUrl from "./assets/pdc-logo.jpeg";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? "brand--compact" : ""}`}>
-      <div className="brand__mark" aria-hidden="true">
-        <span>P</span>
-      </div>
-      <div>
-        <strong>Phoenixville</strong>
-        <span>Democrats</span>
-      </div>
+      <img
+        className="brand__logo"
+        src={pdcLogoUrl}
+        alt="Phoenixville Democrats"
+      />
     </div>
   );
 }
@@ -19,13 +18,18 @@ export function Button({
   children,
   busy,
   variant = "primary",
+  className = "",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   busy?: boolean;
   variant?: "primary" | "secondary" | "danger" | "quiet";
 }) {
   return (
-    <button className={`button button--${variant}`} disabled={busy || props.disabled} {...props}>
+    <button
+      className={`button button--${variant} ${className}`.trim()}
+      disabled={busy || props.disabled}
+      {...props}
+    >
       {busy && <LoaderCircle className="spin" size={18} aria-hidden="true" />}
       {children}
     </button>

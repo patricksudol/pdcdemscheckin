@@ -40,18 +40,28 @@ function ActiveMeetingLanding() {
   return (
     <div className="home-page home-page--center">
       <Brand />
-      <main className="splash-card">
-        <div className="empty-state__icon">
-          {active.isError ? <LockKeyhole /> : <CalendarX2 />}
+      <main className="route-page">
+        <header className="route-page__title">
+          <div className="eyebrow">Phoenixville Democrats</div>
+          <h1>Meeting Check-In</h1>
+        </header>
+        <section className="route-page__message">
+          <div className="empty-state__icon">
+            {active.isError ? <LockKeyhole /> : <CalendarX2 />}
+          </div>
+          <div>
+            <h2>{active.isError ? "Check-in is temporarily unavailable" : "No meeting is active"}</h2>
+            <p>
+              {active.isError
+                ? "Please try again shortly or ask an organizer for help."
+                : "When a monthly meeting opens for check-in, the form will appear on this page."}
+            </p>
+            <a className="text-link" href="/admin">Organizer sign-in →</a>
+          </div>
+        </section>
+        <div className="route-page__footer">
+          Paid for by the Phoenixville Democratic Committee.
         </div>
-        <div className="eyebrow">Monthly meeting check-in</div>
-        <h1>{active.isError ? "We can’t load check-in right now." : "No meeting is active."}</h1>
-        <p>
-          {active.isError
-            ? "Please try again shortly or ask an organizer for help."
-            : "When a Phoenixville Democrats meeting opens for check-in, it will appear right here."}
-        </p>
-        <a className="text-link" href="/admin">Organizer sign-in →</a>
       </main>
     </div>
   );

@@ -22,9 +22,9 @@ services:
       PDC_DATABASE_URL: postgresql+psycopg://pdc:pdc@db:5432/pdcdemscheckin
       PDC_PUBLIC_BASE_URL: ${PDC_PUBLIC_BASE_URL:-http://localhost:8000}
       PDC_SESSION_SECRET: ${PDC_SESSION_SECRET:-local-compose-secret-change-for-production}
-      PDC_GOOGLE_CLIENT_ID: ${PDC_GOOGLE_CLIENT_ID:-}
-      PDC_GOOGLE_CLIENT_SECRET: ${PDC_GOOGLE_CLIENT_SECRET:-}
-      PDC_ADMIN_ALLOWLIST: ${PDC_ADMIN_ALLOWLIST:-organizer@example.com}
+      PDC_SEED_ADMIN_EMAIL: ${PDC_SEED_ADMIN_EMAIL:-admin@pdc.test}
+      PDC_SEED_ADMIN_PASSWORD: ${PDC_SEED_ADMIN_PASSWORD:-demo2026}
+      PDC_SEED_ADMIN_NAME: ${PDC_SEED_ADMIN_NAME:-Test Organizer}
       PDC_SECURE_COOKIES: "false"
     depends_on:
       db:

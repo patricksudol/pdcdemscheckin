@@ -99,7 +99,7 @@ class Organizer(Base):
     __tablename__ = "organizers"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    google_subject: Mapped[str] = mapped_column(String(255), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str] = mapped_column(String(320), unique=True)
     display_name: Mapped[str] = mapped_column(String(180))
     role: Mapped[OrganizerRole] = mapped_column(

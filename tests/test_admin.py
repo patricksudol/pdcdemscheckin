@@ -43,3 +43,23 @@ async def test_opening_meeting_closes_previous_active(app, open_meeting, organiz
 async def test_admin_api_requires_session(app):
     _request, response = await app.asgi_client.get("/api/v1/admin/dashboard")
     assert response.status == 401
+
+
+@pytest.mark.asyncio
+async def test_organizer_can_sign_in_with_password(app, organizer):
+    _request, response = await app.asgi_client.post(
+        "/api/v1/auth/login",
+        json={"email": organizer.email.upper(), "password": "test-password"},
+    )
+    assert response.status == 200
+    assert response.json == {"signed_in": True}
+    assert response.cookies["pdc_session"]
+
+
+@pytest.mark.asyncio
+async def test_organizer_login_rejects_wrong_password(app, organizer):
+    _request, response = await app.asgi_client.post(
+        "/api/v1/auth/login",
+        json={"email": organizer.email, "password": "wrong-password"},
+    )
+    assert response.status == 401

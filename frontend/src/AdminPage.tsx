@@ -31,20 +31,7 @@ export function AdminPage() {
   if (me.isLoading) return <div className="app-loading">Loading organizer workspace…</div>;
   const organizer = me.data;
   if (me.isError || !organizer) {
-    return (
-      <div className="login-page">
-        <Brand />
-        <div className="login-card">
-          <div className="welcome-orb">P</div>
-          <h1>Organizer workspace</h1>
-          <p>Sign in with an approved Google account to manage meetings and attendance.</p>
-          <a className="button button--primary button--wide" href="/api/v1/auth/login">
-            Continue with Google
-          </a>
-          <a className="text-button" href="/">Back to check-in</a>
-        </div>
-      </div>
-    );
+    return <OrganizerLogin onSignedIn={() => me.refetch()} />;
   }
 
   return (
@@ -77,6 +64,63 @@ export function AdminPage() {
         ) : (
           <Overview />
         )}
+      </div>
+    </div>
+  );
+}
+
+function OrganizerLogin({ onSignedIn }: { onSignedIn: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const login = useMutation({
+    mutationFn: () =>
+      api<{ signed_in: boolean }>("/api/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      }),
+    onSuccess: onSignedIn,
+  });
+
+  return (
+    <div className="login-page">
+      <Brand />
+      <div className="login-card">
+        <div className="welcome-orb">P</div>
+        <div className="eyebrow">Committee access</div>
+        <h1>Organizer workspace</h1>
+        <p>Sign in to manage meetings, check-ins, and attendee records.</p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            login.mutate();
+          }}
+        >
+          <Field
+            label="Email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+          <Field
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+          {login.isError && (
+            <div className="form-error" role="alert">{login.error.message}</div>
+          )}
+          <Button type="submit" busy={login.isPending} className="button--wide">
+            Sign in
+          </Button>
+        </form>
+        <a className="text-button" href="/">Back to check-in</a>
       </div>
     </div>
   );

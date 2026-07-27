@@ -1,20 +1,22 @@
+import hashlib
+import hmac
+import secrets
 from datetime import UTC, datetime
 from functools import wraps
 from typing import Any
-from urllib.parse import urlencode
 from uuid import UUID
 
-import httpx
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sanic import Blueprint, Request
-from sanic.exceptions import Forbidden, Unauthorized
-from sanic.response import redirect
+from sanic.exceptions import Forbidden, InvalidUsage, Unauthorized
+from sanic.response import json, redirect
 from sqlalchemy import select
 
 from .models import Organizer, OrganizerRole
 from .settings import Settings
 
 auth_bp = Blueprint("auth", url_prefix="/api/v1/auth")
+PASSWORD_ALGORITHM = "scrypt"
 
 
 def _serializer(settings: Settings) -> URLSafeTimedSerializer:
@@ -30,6 +32,27 @@ def read_session(token: str, settings: Settings) -> dict[str, str] | None:
         return _serializer(settings).loads(token, max_age=settings.session_max_age_seconds)
     except BadSignature, SignatureExpired:
         return None
+
+
+def hash_password(password: str, *, salt: bytes | None = None) -> str:
+    salt = salt or secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return f"{PASSWORD_ALGORITHM}${salt.hex()}${digest.hex()}"
+
+
+def verify_password(password: str, encoded: str | None) -> bool:
+    if not encoded:
+        return False
+    try:
+        algorithm, salt_hex, expected_hex = encoded.split("$", 2)
+        if algorithm != PASSWORD_ALGORITHM:
+            return False
+        actual = hashlib.scrypt(
+            password.encode(), salt=bytes.fromhex(salt_hex), n=2**14, r=8, p=1, dklen=32
+        )
+        return hmac.compare_digest(actual.hex(), expected_hex)
+    except (ValueError, TypeError):
+        return False
 
 
 async def current_organizer(request: Request) -> Organizer:
@@ -61,78 +84,25 @@ def admin_required(owner_only: bool = False):
     return decorator
 
 
-@auth_bp.get("/login")
+@auth_bp.post("/login")
 async def login(request: Request):
     settings: Settings = request.app.ctx.settings
-    if not settings.google_client_id:
-        raise Forbidden("Google sign-in is not configured")
-    redirect_uri = f"{settings.public_base_url}/api/v1/auth/callback"
-    state = _serializer(settings).dumps({"purpose": "google_oauth"})
-    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(
-        {
-            "client_id": settings.google_client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": "openid email profile",
-            "state": state,
-            "prompt": "select_account",
-        }
-    )
-    return redirect(url)
-
-
-@auth_bp.get("/callback")
-async def callback(request: Request):
-    settings: Settings = request.app.ctx.settings
-    state = request.args.get("state", "")
-    try:
-        state_data = _serializer(settings).loads(state, max_age=600)
-    except (BadSignature, SignatureExpired) as error:
-        raise Forbidden("Invalid or expired sign-in request") from error
-    if state_data.get("purpose") != "google_oauth" or not request.args.get("code"):
-        raise Forbidden("Invalid sign-in request")
-    async with httpx.AsyncClient(timeout=10) as client:
-        token_response = await client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": request.args["code"],
-                "client_id": settings.google_client_id,
-                "client_secret": settings.google_client_secret,
-                "redirect_uri": f"{settings.public_base_url}/api/v1/auth/callback",
-                "grant_type": "authorization_code",
-            },
-        )
-        token_response.raise_for_status()
-        access_token = token_response.json()["access_token"]
-        user_response = await client.get(
-            "https://openidconnect.googleapis.com/v1/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        user_response.raise_for_status()
-        user = user_response.json()
-    email = str(user["email"]).strip().lower()
-    if not user.get("email_verified") or email not in settings.admin_allowlist:
-        raise Forbidden("This Google account is not approved")
-
+    payload = request.json or {}
+    email = str(payload.get("email", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    if not email or not password:
+        raise InvalidUsage("Email and password are required")
     async with request.app.ctx.db.session() as db:
         organizer = (
             await db.execute(select(Organizer).where(Organizer.email == email))
         ).scalar_one_or_none()
-        if not organizer:
-            existing_count = len((await db.scalars(select(Organizer.id))).all())
-            organizer = Organizer(
-                google_subject=str(user["sub"]),
-                email=email,
-                display_name=str(user.get("name") or email),
-                role=OrganizerRole.owner if existing_count == 0 else OrganizerRole.admin,
-            )
-            db.add(organizer)
-            await db.flush()
-        organizer.google_subject = str(user["sub"])
-        organizer.display_name = str(user.get("name") or email)
+        if not organizer or not organizer.active or not verify_password(
+            password, organizer.password_hash
+        ):
+            raise Unauthorized("Email or password is incorrect")
         organizer.last_login_at = datetime.now(UTC)
 
-    response = redirect("/admin")
+    response = json({"signed_in": True})
     response.add_cookie(
         "pdc_session",
         issue_session(organizer, settings),
