@@ -15,6 +15,8 @@ import { Brand, Button, Field } from "./components";
 
 type Step = "email" | "returning" | "update" | "new" | "done";
 
+const phoenixSparks = Array.from({ length: 16 }, (_, index) => index);
+
 export function CheckinPage({ token }: { token: string }) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -284,6 +286,9 @@ export function CheckinPage({ token }: { token: string }) {
 function PhoenixCelebration() {
   return (
     <div className="phoenix-celebration" aria-hidden="true">
+      <div className="phoenix-sparks">
+        {phoenixSparks.map((spark) => <span key={spark} />)}
+      </div>
       <svg viewBox="0 0 160 150" focusable="false">
         <defs>
           <linearGradient id="phoenix-blue" x1="0" x2="1" y1="1" y2="0">
