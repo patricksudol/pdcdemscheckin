@@ -58,6 +58,13 @@ class ProfileUpdate(ApiModel):
     phone: str | None = Field(default=None, max_length=30)
 
 
+class AdminProfileCreate(ApiModel):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    email: EmailStr
+    phone: str | None = Field(default=None, max_length=30)
+
+
 class ManualCheckin(ApiModel):
     profile_id: UUID
     reason: str = Field(min_length=3, max_length=500)

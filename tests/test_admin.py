@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 from sqlalchemy import select
@@ -6,10 +7,12 @@ from sqlalchemy import select
 from pdcdemscheckin.auth import issue_session, verify_password
 from pdcdemscheckin.models import (
     AuditEvent,
+    Checkin,
     Meeting,
     MeetingStatus,
     Organizer,
     OrganizerRole,
+    Profile,
 )
 
 CSRF_TOKEN = "test-csrf-token"
@@ -57,6 +60,91 @@ async def test_opening_meeting_closes_previous_active(app, open_meeting, organiz
         assert old.status == MeetingStatus.closed
         assert new.status == MeetingStatus.open
         assert len(events) == 2
+
+
+@pytest.mark.asyncio
+async def test_owner_can_edit_existing_meeting(app, open_meeting, organizer):
+    updated_time = datetime(2026, 7, 28, 0, 30, tzinfo=UTC)
+    _request, response = await app.asgi_client.patch(
+        f"/api/v1/admin/meetings/{open_meeting.id}",
+        json={
+            "title": "Updated Monthly Meeting",
+            "starts_at": updated_time.isoformat(),
+            "location": "Updated Location",
+            "attendee_message": "Updated welcome message",
+        },
+        cookies=session_cookie(app, organizer),
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+    assert response.json["title"] == "Updated Monthly Meeting"
+    assert response.json["location"] == "Updated Location"
+
+    async with app.ctx.db.session() as db:
+        meeting = await db.get(Meeting, open_meeting.id)
+        event = await db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "meeting.updated")
+        )
+        assert meeting.title == "Updated Monthly Meeting"
+        assert meeting.starts_at.replace(tzinfo=UTC) == updated_time
+        assert event
+        assert event.before["title"] == "July Monthly Meeting"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organizer):
+    cookies = session_cookie(app, organizer)
+    _request, response = await app.asgi_client.post(
+        "/api/v1/admin/profiles",
+        json={
+            "first_name": "Taylor",
+            "last_name": "Example",
+            "email": "TAYLOR@example.com",
+            "phone": "(610) 555-0100",
+        },
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 201
+    profile_id = response.json["id"]
+    profile_uuid = UUID(profile_id)
+    assert response.json["email"] == "taylor@example.com"
+
+    _request, response = await app.asgi_client.patch(
+        f"/api/v1/admin/profiles/{profile_id}",
+        json={"first_name": "Tay", "phone": "610-555-0199"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+    assert response.json["first_name"] == "Tay"
+
+    async with app.ctx.db.session() as db:
+        db.add(
+            Checkin(
+                meeting_id=open_meeting.id,
+                profile_id=profile_uuid,
+            )
+        )
+
+    _request, response = await app.asgi_client.request(
+        "DELETE",
+        f"/api/v1/admin/profiles/{profile_id}",
+        json={"reason": "Requested removal"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+
+    async with app.ctx.db.session() as db:
+        profile = await db.get(Profile, profile_uuid)
+        checkin = await db.scalar(select(Checkin))
+        actions = set((await db.scalars(select(AuditEvent.action))).all())
+        assert profile.deleted_at
+        assert profile.email is None
+        assert checkin.profile_id is None
+        assert checkin.anonymized_name == "Deleted attendee"
+        assert {"profile.created", "profile.updated", "profile.deleted"} <= actions
 
 
 @pytest.mark.asyncio

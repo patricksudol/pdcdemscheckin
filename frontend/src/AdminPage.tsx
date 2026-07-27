@@ -9,11 +9,13 @@ import {
   ExternalLink,
   KeyRound,
   Menu,
+  Pencil,
   Plus,
   QrCode,
   RefreshCw,
   Search,
   ShieldCheck,
+  Trash2,
   UserCog,
   Users,
   X,
@@ -257,6 +259,7 @@ function Meetings() {
 
 function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
   const attendance = useQuery({
     queryKey: ["meeting-checkins", meeting.id],
     queryFn: () => api<{ meeting: Meeting; checkins: Checkin[] }>(`/api/v1/admin/meetings/${meeting.id}/checkins`),
@@ -271,12 +274,38 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
       onClose();
     },
   });
+  const updateMeeting = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      return api<Meeting>(`/api/v1/admin/meetings/${meeting.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: data.get("title"),
+          starts_at: new Date(String(data.get("starts_at"))).toISOString(),
+          location: data.get("location") || null,
+          attendee_message: data.get("attendee_message") || null,
+        }),
+      });
+    },
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["meeting-checkins", meeting.id] });
+      setEditing(false);
+      onClose();
+    },
+  });
   const link = `${window.location.origin}/checkin/${meeting.public_token}`;
+  const meetingLocalDate = new Date(
+    new Date(meeting.starts_at).getTime()
+      - new Date(meeting.starts_at).getTimezoneOffset() * 60_000,
+  ).toISOString().slice(0, 16);
   return (
     <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="drawer">
         <div className="drawer__head"><div><StatusBadge status={meeting.status} /><h2>{meeting.title}</h2><p>{formatMeetingDate(meeting.starts_at)}</p></div><button className="icon-button" onClick={onClose}><X /></button></div>
         <div className="drawer__actions">
+          <Button variant="secondary" onClick={() => setEditing(true)}><Pencil size={17} />Edit</Button>
           {meeting.status !== "open" ? <Button onClick={() => status.mutate("open")} busy={status.isPending}><CheckCircle2 size={17} />Open check-in</Button> : <Button variant="secondary" onClick={() => status.mutate("closed")} busy={status.isPending}>Close check-in</Button>}
           <a className="button button--secondary" href={`/api/v1/admin/meetings/${meeting.id}/qr.svg`}><QrCode size={17} />QR code</a>
           <a className="button button--quiet" href={`/api/v1/admin/meetings/${meeting.id}/export.csv`}><Download size={17} />CSV</a>
@@ -297,34 +326,174 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
           {!attendance.data?.checkins.length && <EmptyState icon={<ClipboardCheck />} title="No check-ins yet">Open and share the meeting link to begin.</EmptyState>}
         </div>
       </aside>
+      {editing && (
+        <Modal title="Edit meeting" onClose={() => setEditing(false)}>
+          <form className="modal-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); updateMeeting.mutate(event.currentTarget); }}>
+            <Field label="Meeting title" name="title" defaultValue={meeting.title} required autoFocus />
+            <Field label="Date and time" name="starts_at" type="datetime-local" defaultValue={meetingLocalDate} required />
+            <Field label="Location (optional)" name="location" defaultValue={meeting.location ?? ""} />
+            <label className="field">
+              <span>Welcome message (optional)</span>
+              <textarea name="attendee_message" rows={3} defaultValue={meeting.attendee_message ?? ""} />
+            </label>
+            {updateMeeting.isError && <div className="form-error">{updateMeeting.error.message}</div>}
+            <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setEditing(false)}>Cancel</Button><Button busy={updateMeeting.isPending}>Save changes</Button></div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
 
 function Profiles() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<Profile | null>(null);
   const profiles = useQuery({
     queryKey: ["profiles", search],
     queryFn: () => api<Profile[]>(`/api/v1/admin/profiles?q=${encodeURIComponent(search)}`),
   });
+  const create = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      return api<Profile>("/api/v1/admin/profiles", {
+        method: "POST",
+        body: JSON.stringify({
+          first_name: data.get("first_name"),
+          last_name: data.get("last_name"),
+          email: data.get("email"),
+          phone: data.get("phone") || null,
+        }),
+      });
+    },
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setCreating(false);
+    },
+  });
   return (
     <main className="admin-content">
-      <PageTitle eyebrow="Community" title="Profiles" subtitle="Find people and review the contact information they shared." />
+      <div className="title-action">
+        <PageTitle eyebrow="Community" title="Profiles" subtitle="Find people and manage the contact information they shared." />
+        <Button onClick={() => setCreating(true)}><Plus size={18} />Add profile</Button>
+      </div>
       <section className="panel">
         <div className="search-box"><Search size={19} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or email…" aria-label="Search profiles" /></div>
         <div className="profile-table">
           <div className="profile-table__header"><span>Name</span><span>Email</span><span>Phone</span><span>Joined</span></div>
           {profiles.data?.map((profile) => (
-            <div className="profile-table__row" key={profile.id}>
+            <button className="profile-table__row profile-table__row--button" key={profile.id} onClick={() => setSelected(profile)}>
               <span><div className="avatar">{profile.first_name.charAt(0)}</div><strong>{profile.first_name} {profile.last_name}</strong></span>
               <span>{profile.email}</span><span>{profile.phone || "—"}</span>
               <span>{new Date(profile.created_at).toLocaleDateString()}</span>
-            </div>
+            </button>
           ))}
         </div>
         {!profiles.data?.length && <EmptyState icon={<Users />} title="No profiles found">Profiles appear when attendees first check in.</EmptyState>}
       </section>
+      {creating && (
+        <Modal title="Add profile" onClose={() => setCreating(false)}>
+          <ProfileForm
+            submitLabel="Add profile"
+            busy={create.isPending}
+            error={create.isError ? create.error.message : undefined}
+            onCancel={() => setCreating(false)}
+            onSubmit={(form) => create.mutate(form)}
+          />
+        </Modal>
+      )}
+      {selected && <ProfileEditor profile={selected} onClose={() => setSelected(null)} />}
     </main>
+  );
+}
+
+function ProfileForm({
+  profile,
+  submitLabel,
+  busy,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  profile?: Profile;
+  submitLabel: string;
+  busy: boolean;
+  error?: string;
+  onCancel: () => void;
+  onSubmit: (form: HTMLFormElement) => void;
+}) {
+  return (
+    <form className="modal-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onSubmit(event.currentTarget); }}>
+      <Field label="First name" name="first_name" defaultValue={profile?.first_name ?? ""} required autoFocus />
+      <Field label="Last name" name="last_name" defaultValue={profile?.last_name ?? ""} required />
+      <Field label="Email" name="email" type="email" defaultValue={profile?.email ?? ""} required />
+      <Field label="Phone (optional)" name="phone" type="tel" defaultValue={profile?.phone ?? ""} />
+      {error && <div className="form-error">{error}</div>}
+      <div className="modal-actions"><Button variant="secondary" type="button" onClick={onCancel}>Cancel</Button><Button busy={busy}>{submitLabel}</Button></div>
+    </form>
+  );
+}
+
+function ProfileEditor({ profile, onClose }: { profile: Profile; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [reason, setReason] = useState("");
+  const update = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      return api<Profile>(`/api/v1/admin/profiles/${profile.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          first_name: data.get("first_name"),
+          last_name: data.get("last_name"),
+          email: data.get("email"),
+          phone: data.get("phone") || null,
+        }),
+      });
+    },
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      onClose();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => api(`/api/v1/admin/profiles/${profile.id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    }),
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      onClose();
+    },
+  });
+  return (
+    <Modal title="Edit profile" onClose={onClose}>
+      {!confirmingDelete ? (
+        <>
+          <ProfileForm
+            profile={profile}
+            submitLabel="Save changes"
+            busy={update.isPending}
+            error={update.isError ? update.error.message : undefined}
+            onCancel={onClose}
+            onSubmit={(form) => update.mutate(form)}
+          />
+          <div className="danger-zone">
+            <Button variant="quiet" type="button" onClick={() => setConfirmingDelete(true)}><Trash2 size={17} />Delete profile</Button>
+          </div>
+        </>
+      ) : (
+        <div className="modal-form">
+          <p>Delete {profile.first_name} {profile.last_name}? Their contact details will be removed, while historical attendance totals remain intact.</p>
+          <Field label="Reason for deletion" name="reason" value={reason} onChange={(event) => setReason(event.target.value)} minLength={3} required autoFocus />
+          {remove.isError && <div className="form-error">{remove.error.message}</div>}
+          <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setConfirmingDelete(false)}>Cancel</Button><Button type="button" busy={remove.isPending} disabled={reason.trim().length < 3} onClick={() => remove.mutate()}>Delete profile</Button></div>
+        </div>
+      )}
+    </Modal>
   );
 }
 

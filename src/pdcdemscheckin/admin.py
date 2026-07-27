@@ -28,6 +28,7 @@ from .models import (
 )
 from .public import meeting_json, normalize_email, normalize_phone
 from .schemas import (
+    AdminProfileCreate,
     CorrectionReason,
     ManualCheckin,
     MeetingCreate,
@@ -95,7 +96,11 @@ async def create_setup_link(db, request: Request, organizer: Organizer) -> str:
             expires_at=now + timedelta(hours=24),
         )
     )
-    return f"{request.app.ctx.settings.public_base_url}/setup-password/{raw_token}"
+    settings = request.app.ctx.settings
+    base_url = settings.public_base_url
+    if settings.environment != "production":
+        base_url = f"{request.scheme}://{request.host}"
+    return f"{base_url.rstrip('/')}/setup-password/{raw_token}"
 
 
 async def audit(
@@ -388,6 +393,45 @@ async def list_profiles(request: Request):
             await db.execute(statement.order_by(Profile.last_name, Profile.first_name).limit(200))
         ).scalars()
         return [profile_json(profile) for profile in profiles]
+
+
+@admin_bp.post("/profiles")
+@admin_required()
+async def create_profile(request: Request):
+    payload = AdminProfileCreate.model_validate(request.json or {})
+    email = normalize_email(str(payload.email))
+    phone = normalize_phone(payload.phone)
+    try:
+        async with request.app.ctx.db.session() as db:
+            if await db.scalar(
+                select(Profile).where(
+                    Profile.normalized_email == email,
+                    Profile.deleted_at.is_(None),
+                )
+            ):
+                raise InvalidUsage("A profile with that email already exists")
+            profile = Profile(
+                first_name=payload.first_name.strip(),
+                last_name=payload.last_name.strip(),
+                email=email,
+                normalized_email=email,
+                phone=phone,
+                consented_at=datetime.now(UTC),
+            )
+            db.add(profile)
+            await db.flush()
+            await audit(
+                db,
+                request,
+                "profile.created",
+                "profile",
+                profile.id,
+                reason="Created by an administrator",
+                after=profile_json(profile),
+            )
+            return profile_json(profile), 201
+    except IntegrityError as error:
+        raise InvalidUsage("A profile with that email already exists") from error
 
 
 @admin_bp.get("/organizers")

@@ -185,7 +185,10 @@ h2 { font-size: 1.8rem; }
 .profile-table__header, .profile-table__row { display: grid; grid-template-columns: 1.2fr 1.5fr 1fr .7fr; gap: 1rem; align-items: center; padding: .9rem 1.4rem; border-bottom: 1px solid #edf0f2; }
 .profile-table__header { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; background: #fbfcfc; }
 .profile-table__row { font-size: .82rem; color: #536173; }
+.profile-table__row--button { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.profile-table__row--button:hover { background: #f7f9fa; }
 .profile-table__row > span:first-child { display: flex; align-items: center; gap: .65rem; color: #203148; }
+.danger-zone { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #edf0f2; }
 .organizer-table__header, .organizer-table__row { display: grid; grid-template-columns: 1.4fr .55fr .85fr .65fr 1.2fr; gap: 1rem; align-items: center; padding: .9rem 1.4rem; border-bottom: 1px solid #edf0f2; }
 .organizer-table__header { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; background: #fbfcfc; }
 .organizer-table__row { font-size: .82rem; color: #536173; }
