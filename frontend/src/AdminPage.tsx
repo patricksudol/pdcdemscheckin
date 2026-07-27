@@ -448,7 +448,7 @@ function Profiles() {
           {profiles.data?.map((profile) => (
             <button className="profile-table__row profile-table__row--button" key={profile.id} onClick={() => setSelected(profile)}>
               <span><div className="avatar">{profile.first_name.charAt(0)}</div><strong>{profile.first_name} {profile.last_name}</strong></span>
-              <span>{profile.email}</span><span>{profile.phone || "—"}</span>
+              <span>{profile.email || "—"}</span><span>{profile.phone || "—"}</span>
               <span>{new Date(profile.created_at).toLocaleDateString()}</span>
             </button>
           ))}
@@ -490,7 +490,7 @@ function ProfileForm({
     <form className="modal-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onSubmit(event.currentTarget); }}>
       <Field label="First name" name="first_name" defaultValue={profile?.first_name ?? ""} required autoFocus />
       <Field label="Last name" name="last_name" defaultValue={profile?.last_name ?? ""} required />
-      <Field label="Email" name="email" type="email" defaultValue={profile?.email ?? ""} required />
+      <Field label="Email (optional)" name="email" type="email" defaultValue={profile?.email ?? ""} />
       <Field label="Phone (optional)" name="phone" type="tel" defaultValue={profile?.phone ?? ""} />
       {error && <div className="form-error">{error}</div>}
       <div className="modal-actions"><Button variant="secondary" type="button" onClick={onCancel}>Cancel</Button><Button busy={busy}>{submitLabel}</Button></div>
@@ -502,6 +502,10 @@ function ProfileEditor({ profile, onClose }: { profile: Profile; onClose: () => 
   const queryClient = useQueryClient();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [reason, setReason] = useState("");
+  const history = useQuery({
+    queryKey: ["profile-history", profile.id],
+    queryFn: () => api<{ stats: { meetings_attended: number; first_checkin_at: string | null; latest_checkin_at: string | null }; meetings: { id: string; title: string; starts_at: string; checked_in_at: string }[] }>(`/api/v1/admin/profiles/${profile.id}/history`),
+  });
   const update = useMutation({
     mutationFn: (form: HTMLFormElement) => {
       const data = new FormData(form);
@@ -535,6 +539,7 @@ function ProfileEditor({ profile, onClose }: { profile: Profile; onClose: () => 
     <Modal title="Edit profile" onClose={onClose}>
       {!confirmingDelete ? (
         <>
+          {history.data && <div className="profile-history"><div className="profile-history__stats"><span><strong>{history.data.stats.meetings_attended}</strong>meetings attended</span><span><strong>{history.data.stats.latest_checkin_at ? new Date(history.data.stats.latest_checkin_at).toLocaleDateString() : "—"}</strong>last attended</span></div>{history.data.meetings.length > 0 && <div className="profile-history__list">{history.data.meetings.map((meeting) => <div key={meeting.id}><strong>{meeting.title}</strong><small>{formatMeetingDate(meeting.starts_at)} · checked in {new Date(meeting.checked_in_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small></div>)}</div>}</div>}
           <ProfileForm
             profile={profile}
             submitLabel="Save changes"

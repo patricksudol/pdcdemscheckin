@@ -61,7 +61,7 @@ class ProfileUpdate(ApiModel):
 class AdminProfileCreate(ApiModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
-    email: EmailStr
+    email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=30)
 
 

@@ -451,6 +451,40 @@ async def create_profile(request: Request):
         raise InvalidUsage("A profile with that email already exists") from error
 
 
+@admin_bp.get("/profiles/<profile_id:uuid>/history")
+@admin_required()
+async def profile_history(request: Request, profile_id: UUID):
+    async with request.app.ctx.db.session() as db:
+        profile = await db.get(Profile, profile_id)
+        if not profile or profile.deleted_at:
+            raise NotFound("Profile not found")
+        rows = (
+            await db.execute(
+                select(Checkin, Meeting)
+                .join(Meeting, Checkin.meeting_id == Meeting.id)
+                .where(Checkin.profile_id == profile_id)
+                .order_by(Checkin.checked_in_at.desc())
+            )
+        ).all()
+        dates = [checkin.checked_in_at for checkin, _meeting in rows]
+        return {
+            "stats": {
+                "meetings_attended": len(rows),
+                "first_checkin_at": min(dates).isoformat() if dates else None,
+                "latest_checkin_at": max(dates).isoformat() if dates else None,
+            },
+            "meetings": [
+                {
+                    "id": str(meeting.id),
+                    "title": meeting.title,
+                    "starts_at": meeting.starts_at.isoformat(),
+                    "checked_in_at": checkin.checked_in_at.isoformat(),
+                }
+                for checkin, meeting in rows
+            ],
+        }
+
+
 @admin_bp.get("/organizers")
 @admin_required(owner_only=True)
 async def list_organizers(request: Request):
@@ -759,8 +793,8 @@ async def update_profile(request: Request, profile_id: UUID):
             raise NotFound("Profile not found")
         before = profile_json(profile)
         for field, value in payload.model_dump(exclude_unset=True).items():
-            if field == "email" and value:
-                value = normalize_email(str(value))
+            if field == "email":
+                value = normalize_email(str(value)) if value else None
                 profile.normalized_email = value
             if field == "phone":
                 value = normalize_phone(value)

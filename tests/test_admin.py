@@ -99,7 +99,6 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
         json={
             "first_name": "Taylor",
             "last_name": "Example",
-            "email": "TAYLOR@example.com",
             "phone": "(610) 555-0100",
         },
         cookies=cookies,
@@ -108,16 +107,29 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
     assert response.status == 201
     profile_id = response.json["id"]
     profile_uuid = UUID(profile_id)
-    assert response.json["email"] == "taylor@example.com"
+    assert response.json["email"] is None
 
     _request, response = await app.asgi_client.patch(
         f"/api/v1/admin/profiles/{profile_id}",
-        json={"first_name": "Tay", "phone": "610-555-0199"},
+        json={
+            "first_name": "Tay",
+            "email": "TAYLOR@example.com",
+            "phone": "610-555-0199",
+        },
         cookies=cookies,
         headers=csrf_headers(),
     )
     assert response.status == 200
     assert response.json["first_name"] == "Tay"
+
+    _request, response = await app.asgi_client.patch(
+        f"/api/v1/admin/profiles/{profile_id}",
+        json={"email": None},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+    assert response.json["email"] is None
 
     async with app.ctx.db.session() as db:
         db.add(
