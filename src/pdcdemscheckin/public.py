@@ -114,6 +114,7 @@ async def lookup_profile(request: Request, token: str):
             "found": True,
             "first_name": profile.first_name,
             "last_name": profile.last_name,
+            "email": profile.email,
             "phone": profile.phone,
             "already_checked_in": existing is not None,
         }
@@ -138,7 +139,23 @@ async def checkin_existing(request: Request, token: str):
         if not profile:
             raise NotFound("Profile not found")
 
-        changes = payload.model_dump(exclude={"email"}, exclude_unset=True)
+        if payload.new_email is not None:
+            new_email = normalize_email(str(payload.new_email))
+            duplicate = await db.scalar(
+                select(Profile.id).where(
+                    Profile.normalized_email == new_email,
+                    Profile.id != profile.id,
+                    Profile.deleted_at.is_(None),
+                )
+            )
+            if duplicate:
+                raise InvalidUsage("A profile already exists for that email")
+            profile.email = new_email
+            profile.normalized_email = new_email
+
+        changes = payload.model_dump(
+            exclude={"email", "new_email"}, exclude_unset=True
+        )
         for field, value in changes.items():
             if field in {"first_name", "last_name"}:
                 value = value.strip()
@@ -146,6 +163,10 @@ async def checkin_existing(request: Request, token: str):
                 value = normalize_phone(value)
             setattr(profile, field, value)
         profile_first_name = profile.first_name
+        try:
+            await db.flush()
+        except IntegrityError as error:
+            raise InvalidUsage("A profile already exists for that email") from error
         checkin = Checkin(meeting_id=meeting.id, profile_id=profile.id)
         db.add(checkin)
         try:

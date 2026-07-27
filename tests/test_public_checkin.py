@@ -43,6 +43,7 @@ async def test_new_profile_then_returning_checkin_is_idempotent(app, open_meetin
         "found": True,
         "first_name": "Ada",
         "last_name": "Lovelace",
+        "email": "ada@example.com",
         "phone": "6105551212",
         "already_checked_in": True,
     }
@@ -80,6 +81,7 @@ async def test_returning_attendee_can_update_profile_while_checking_in(app, open
             "email": "ada@example.com",
             "first_name": "Ada",
             "last_name": "Lovelace",
+            "new_email": "ada.lovelace@example.com",
             "phone": "(610) 555-1212",
         },
     )
@@ -90,6 +92,8 @@ async def test_returning_attendee_can_update_profile_while_checking_in(app, open
     async with app.ctx.db.session() as db:
         profile = await db.get(Profile, profile_id)
         assert profile.last_name == "Lovelace"
+        assert profile.email == "ada.lovelace@example.com"
+        assert profile.normalized_email == "ada.lovelace@example.com"
         assert profile.phone == "6105551212"
 
 

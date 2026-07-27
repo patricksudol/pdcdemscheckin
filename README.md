@@ -102,25 +102,6 @@ docker compose down -v  # also deletes the local PostgreSQL volume
 
 The final command is destructive and should only be used when intentionally resetting local data.
 
-## Viewing the Hetzner development app from an iPad
-
-The Hetzner server runs the app on its own loopback port 8000. In Blink Shell on the iPad, open a
-dedicated session and keep it running:
-
-```bash
-ssh -N -L 8080:127.0.0.1:8000 root@178.156.217.239
-```
-
-Then open this URL in Safari:
-
-```text
-http://127.0.0.1:8080
-```
-
-The `-N` option creates only the tunnel, so a blank Blink screen is normal. Keep Blink connected
-while using Safari; iPadOS may suspend the tunnel if Blink is force-closed. Port 8080 is the
-iPad-side port, while port 8000 is the Hetzner-side application port.
-
 ## Organizer sign-in
 
 Organizer access uses email and password credentials. For local development, set the seeded

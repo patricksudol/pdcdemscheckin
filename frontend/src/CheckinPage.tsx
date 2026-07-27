@@ -20,6 +20,7 @@ export function CheckinPage({ token }: { token: string }) {
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
 
@@ -35,6 +36,7 @@ export function CheckinPage({ token }: { token: string }) {
         found: boolean;
         first_name?: string;
         last_name?: string;
+        email?: string;
         phone?: string | null;
         already_checked_in?: boolean;
       }>(
@@ -45,6 +47,7 @@ export function CheckinPage({ token }: { token: string }) {
       if (data.found) {
         setFirstName(data.first_name ?? "");
         setLastName(data.last_name ?? "");
+        setProfileEmail(data.email ?? email);
         setPhone(data.phone ?? "");
         setAlreadyCheckedIn(Boolean(data.already_checked_in));
         setStep(data.already_checked_in ? "done" : "returning");
@@ -193,7 +196,7 @@ export function CheckinPage({ token }: { token: string }) {
           <>
             <div className="step-label">Update your profile</div>
             <h1>Is your information still right?</h1>
-            <p className="lede">Update your name or phone number, then we’ll check you in.</p>
+            <p className="lede">Update your contact information, then we’ll check you in.</p>
             <form
               className="form-grid"
               onSubmit={(event: FormEvent<HTMLFormElement>) => {
@@ -202,12 +205,14 @@ export function CheckinPage({ token }: { token: string }) {
                 returning.mutate({
                   first_name: String(data.get("first_name") ?? ""),
                   last_name: String(data.get("last_name") ?? ""),
+                  new_email: String(data.get("new_email") ?? ""),
                   phone: String(data.get("phone") ?? "") || null,
                 });
               }}
             >
               <Field label="First name" name="first_name" defaultValue={firstName} autoComplete="given-name" required autoFocus />
               <Field label="Last name" name="last_name" defaultValue={lastName} autoComplete="family-name" required />
+              <Field label="Email address" name="new_email" type="email" defaultValue={profileEmail} autoComplete="email" required />
               <Field label="Phone (optional)" name="phone" type="tel" defaultValue={phone} autoComplete="tel" placeholder="(610) 555-0123" />
               <ErrorMessage mutation={returning} />
               <Button type="submit" busy={returning.isPending} className="button--wide field--full">
