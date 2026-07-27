@@ -150,6 +150,23 @@ docker compose up -d --force-recreate app
 On the HTTP local stack, Compose deliberately sets secure cookies off. Production must use HTTPS,
 strong credentials stored as secrets, and `PDC_SECURE_COOKIES=true`.
 
+### Provisioning additional organizers
+
+Owners can open **Admin > Organizers** to create accounts, select an `admin` or `owner` role,
+deactivate access, review recent authentication activity, and generate password setup links.
+Setup links:
+
+- contain a cryptographically random token whose SHA-256 hash is stored in the database;
+- expire after 24 hours;
+- are invalidated when a replacement link is generated;
+- can be used only once; and
+- invalidate any existing sessions when a password is set.
+
+No email provider is configured. The owner must copy the generated setup link and send it to the
+organizer through a trusted channel. Organizers can change their own password under **My
+password**, which signs out their existing session. The API prevents an owner from deactivating
+or demoting their own account and always requires at least one active owner.
+
 ## Native development without Docker
 
 Use this path when editing with hot reload.

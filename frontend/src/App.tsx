@@ -4,6 +4,7 @@ import { CalendarX2, LockKeyhole } from "lucide-react";
 
 import { AdminPage } from "./AdminPage";
 import { CheckinPage } from "./CheckinPage";
+import { SetupPasswordPage } from "./SetupPasswordPage";
 import { api, Meeting } from "./api";
 import { Brand } from "./components";
 
@@ -69,6 +70,13 @@ function ActiveMeetingLanding() {
 
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path.startsWith("/setup-password/")) {
+    return (
+      <SetupPasswordPage
+        token={decodeURIComponent(path.slice("/setup-password/".length))}
+      />
+    );
+  }
   if (path.startsWith("/admin")) return <AdminPage />;
   if (path.startsWith("/checkin/")) {
     return <CheckinPage token={decodeURIComponent(path.slice("/checkin/".length))} />;

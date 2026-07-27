@@ -3,8 +3,14 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select
 
-from pdcdemscheckin.auth import issue_session
-from pdcdemscheckin.models import AuditEvent, Meeting, MeetingStatus
+from pdcdemscheckin.auth import issue_session, verify_password
+from pdcdemscheckin.models import (
+    AuditEvent,
+    Meeting,
+    MeetingStatus,
+    Organizer,
+    OrganizerRole,
+)
 
 CSRF_TOKEN = "test-csrf-token"
 
@@ -114,3 +120,96 @@ async def test_login_rate_limit(app, organizer):
     finally:
         app.ctx.settings.login_rate_limit = 5
         app.ctx.login_attempts.clear()
+
+
+@pytest.mark.asyncio
+async def test_owner_can_provision_organizer_with_one_time_setup_link(app, organizer):
+    _request, created = await app.asgi_client.post(
+        "/api/v1/admin/organizers",
+        json={
+            "email": "new.admin@example.com",
+            "display_name": "New Admin",
+            "role": "admin",
+        },
+        cookies=session_cookie(app, organizer),
+        headers=csrf_headers(),
+    )
+    assert created.status == 201
+    assert created.json["password_set"] is False
+    token = created.json["setup_url"].rsplit("/", 1)[-1]
+
+    _request, details = await app.asgi_client.get(
+        f"/api/v1/auth/password-setup/{token}"
+    )
+    assert details.status == 200
+    assert details.json["email"] == "new.admin@example.com"
+
+    _request, completed = await app.asgi_client.post(
+        f"/api/v1/auth/password-setup/{token}",
+        json={"password": "a-strong-new-password"},
+    )
+    assert completed.status == 200
+
+    _request, reused = await app.asgi_client.post(
+        f"/api/v1/auth/password-setup/{token}",
+        json={"password": "another-strong-password"},
+    )
+    assert reused.status == 400
+
+    async with app.ctx.db.session() as db:
+        provisioned = await db.scalar(
+            select(Organizer).where(Organizer.email == "new.admin@example.com")
+        )
+        assert provisioned
+        assert verify_password("a-strong-new-password", provisioned.password_hash)
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_manage_organizers(app):
+    admin = Organizer(
+        email="admin@example.com",
+        display_name="Admin",
+        password_hash="not-used",
+        role=OrganizerRole.admin,
+    )
+    async with app.ctx.db.session() as db:
+        db.add(admin)
+        await db.flush()
+    _request, response = await app.asgi_client.get(
+        "/api/v1/admin/organizers",
+        cookies=session_cookie(app, admin),
+    )
+    assert response.status == 403
+
+
+@pytest.mark.asyncio
+async def test_owner_cannot_demote_or_deactivate_self(app, organizer):
+    for changes in ({"role": "admin"}, {"active": False}):
+        _request, response = await app.asgi_client.patch(
+            f"/api/v1/admin/organizers/{organizer.id}",
+            json=changes,
+            cookies=session_cookie(app, organizer),
+            headers=csrf_headers(),
+        )
+        assert response.status == 400
+
+
+@pytest.mark.asyncio
+async def test_password_change_invalidates_existing_session(app, organizer):
+    cookies = session_cookie(app, organizer)
+    _request, changed = await app.asgi_client.post(
+        "/api/v1/auth/password",
+        json={
+            "current_password": "test-password",
+            "password": "a-new-strong-password",
+        },
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert changed.status == 200
+
+    _request, stale = await app.asgi_client.get(
+        "/api/v1/auth/me",
+        cookies=cookies,
+    )
+    assert stale.status == 401

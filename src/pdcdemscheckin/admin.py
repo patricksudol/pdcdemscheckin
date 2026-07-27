@@ -1,7 +1,8 @@
 import csv
+import hashlib
 import io
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -10,11 +11,21 @@ import qrcode.image.svg
 from sanic import Blueprint, Request
 from sanic.exceptions import InvalidUsage, NotFound
 from sanic.response import raw, text
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from .auth import admin_required
-from .models import AuditEvent, Checkin, CheckinSource, Meeting, Profile
+from .models import (
+    AuditEvent,
+    Checkin,
+    CheckinSource,
+    Meeting,
+    Organizer,
+    OrganizerRole,
+    PasswordSetupToken,
+    Profile,
+)
 from .public import meeting_json, normalize_email, normalize_phone
 from .schemas import (
     CorrectionReason,
@@ -23,6 +34,8 @@ from .schemas import (
     MeetingStatusUpdate,
     MeetingUpdate,
     MergeProfiles,
+    OrganizerCreate,
+    OrganizerUpdate,
     ProfileUpdate,
 )
 
@@ -46,6 +59,43 @@ def safe_csv(value: Any) -> Any:
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@"):
         return f"'{value}"
     return value
+
+
+def organizer_json(organizer: Organizer) -> dict[str, Any]:
+    return {
+        "id": str(organizer.id),
+        "email": organizer.email,
+        "display_name": organizer.display_name,
+        "role": organizer.role.value,
+        "active": organizer.active,
+        "password_set": bool(organizer.password_hash),
+        "created_at": organizer.created_at.isoformat(),
+        "last_login_at": organizer.last_login_at.isoformat()
+        if organizer.last_login_at
+        else None,
+    }
+
+
+async def create_setup_link(db, request: Request, organizer: Organizer) -> str:
+    now = datetime.now(UTC)
+    await db.execute(
+        update(PasswordSetupToken)
+        .where(
+            PasswordSetupToken.organizer_id == organizer.id,
+            PasswordSetupToken.used_at.is_(None),
+        )
+        .values(used_at=now)
+    )
+    raw_token = secrets.token_urlsafe(32)
+    db.add(
+        PasswordSetupToken(
+            organizer_id=organizer.id,
+            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+            created_by_id=request.ctx.organizer.id,
+            expires_at=now + timedelta(hours=24),
+        )
+    )
+    return f"{request.app.ctx.settings.public_base_url}/setup-password/{raw_token}"
 
 
 async def audit(
@@ -338,6 +388,139 @@ async def list_profiles(request: Request):
             await db.execute(statement.order_by(Profile.last_name, Profile.first_name).limit(200))
         ).scalars()
         return [profile_json(profile) for profile in profiles]
+
+
+@admin_bp.get("/organizers")
+@admin_required(owner_only=True)
+async def list_organizers(request: Request):
+    async with request.app.ctx.db.session() as db:
+        organizers = (
+            await db.scalars(select(Organizer).order_by(Organizer.display_name))
+        ).all()
+        return [organizer_json(organizer) for organizer in organizers]
+
+
+@admin_bp.post("/organizers")
+@admin_required(owner_only=True)
+async def create_organizer(request: Request):
+    payload = OrganizerCreate.model_validate(request.json or {})
+    email = str(payload.email).strip().lower()
+    try:
+        async with request.app.ctx.db.session() as db:
+            if await db.scalar(select(Organizer).where(Organizer.email == email)):
+                raise InvalidUsage("An organizer with that email already exists")
+            organizer = Organizer(
+                email=email,
+                display_name=payload.display_name.strip(),
+                role=payload.role,
+                active=True,
+            )
+            db.add(organizer)
+            await db.flush()
+            setup_url = await create_setup_link(db, request, organizer)
+            await audit(
+                db,
+                request,
+                "organizer.created",
+                "organizer",
+                organizer.id,
+                after=organizer_json(organizer),
+            )
+            return {**organizer_json(organizer), "setup_url": setup_url}, 201
+    except IntegrityError as error:
+        raise InvalidUsage("An organizer with that email already exists") from error
+
+
+@admin_bp.patch("/organizers/<organizer_id:uuid>")
+@admin_required(owner_only=True)
+async def update_organizer(request: Request, organizer_id: UUID):
+    payload = OrganizerUpdate.model_validate(request.json or {})
+    changes = payload.model_dump(exclude_unset=True)
+    async with request.app.ctx.db.session() as db:
+        organizer = await db.get(Organizer, organizer_id)
+        if not organizer:
+            raise NotFound("Organizer not found")
+        if organizer.id == request.ctx.organizer.id and (
+            changes.get("active") is False
+            or ("role" in changes and changes["role"] != OrganizerRole.owner)
+        ):
+            raise InvalidUsage("You cannot deactivate or demote your own owner account")
+        removing_owner = (
+            organizer.role == OrganizerRole.owner
+            and organizer.active
+            and (
+                changes.get("active") is False
+                or ("role" in changes and changes["role"] != OrganizerRole.owner)
+            )
+        )
+        if removing_owner:
+            active_owner_count = await db.scalar(
+                select(func.count(Organizer.id)).where(
+                    Organizer.role == OrganizerRole.owner,
+                    Organizer.active.is_(True),
+                )
+            )
+            if (active_owner_count or 0) <= 1:
+                raise InvalidUsage("At least one active owner is required")
+        before = organizer_json(organizer)
+        for field, value in changes.items():
+            if field == "display_name":
+                value = value.strip()
+            setattr(organizer, field, value)
+        await db.flush()
+        await audit(
+            db,
+            request,
+            "organizer.updated",
+            "organizer",
+            organizer.id,
+            before=before,
+            after=organizer_json(organizer),
+        )
+        return organizer_json(organizer)
+
+
+@admin_bp.post("/organizers/<organizer_id:uuid>/setup-link")
+@admin_required(owner_only=True)
+async def regenerate_setup_link(request: Request, organizer_id: UUID):
+    async with request.app.ctx.db.session() as db:
+        organizer = await db.get(Organizer, organizer_id)
+        if not organizer:
+            raise NotFound("Organizer not found")
+        if not organizer.active:
+            raise InvalidUsage("Reactivate this organizer before creating a setup link")
+        setup_url = await create_setup_link(db, request, organizer)
+        await audit(
+            db,
+            request,
+            "organizer.setup_link_created",
+            "organizer",
+            organizer.id,
+        )
+        return {"setup_url": setup_url, "expires_in_hours": 24}
+
+
+@admin_bp.get("/organizers/activity")
+@admin_required(owner_only=True)
+async def organizer_activity(request: Request):
+    async with request.app.ctx.db.session() as db:
+        events = (
+            await db.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.action.like("auth.%"))
+                .order_by(AuditEvent.created_at.desc())
+                .limit(50)
+            )
+        ).all()
+        return [
+            {
+                "id": str(event.id),
+                "actor_id": str(event.actor_id) if event.actor_id else None,
+                "action": event.action,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in events
+        ]
 
 
 @admin_bp.patch("/profiles/<profile_id:uuid>")

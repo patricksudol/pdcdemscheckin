@@ -13,7 +13,8 @@ from sanic.exceptions import Forbidden, InvalidUsage, SanicException, Unauthoriz
 from sanic.response import json, redirect
 from sqlalchemy import select
 
-from .models import AuditEvent, Organizer, OrganizerRole
+from .models import AuditEvent, Organizer, OrganizerRole, PasswordSetupToken
+from .schemas import PasswordChange, PasswordSet
 from .settings import Settings
 
 auth_bp = Blueprint("auth", url_prefix="/api/v1/auth")
@@ -31,12 +32,13 @@ def issue_session(
         {
             "id": str(organizer.id),
             "email": organizer.email,
+            "version": organizer.session_version,
             "csrf_token": csrf_token or secrets.token_urlsafe(32),
         }
     )
 
 
-def read_session(token: str, settings: Settings) -> dict[str, str] | None:
+def read_session(token: str, settings: Settings) -> dict[str, Any] | None:
     try:
         return _serializer(settings).loads(token, max_age=settings.session_max_age_seconds)
     except BadSignature, SignatureExpired:
@@ -84,7 +86,11 @@ async def current_organizer(request: Request) -> Organizer:
         raise Unauthorized("Organizer session is invalid") from error
     async with request.app.ctx.db.session() as db:
         organizer = await db.get(Organizer, organizer_id)
-        if not organizer or not organizer.active:
+        if (
+            not organizer
+            or not organizer.active
+            or session_data.get("version") != organizer.session_version
+        ):
             raise Unauthorized("Organizer access is inactive")
         return organizer
 
@@ -195,6 +201,97 @@ async def login(request: Request):
 @admin_required()
 async def logout(request: Request):
     response = redirect("/")
+    response.delete_cookie("pdc_session", path="/")
+    return response
+
+
+def _setup_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def _valid_setup_token(request: Request, token: str):
+    now = datetime.now(UTC)
+    async with request.app.ctx.db.session() as db:
+        row = (
+            await db.execute(
+                select(PasswordSetupToken, Organizer)
+                .join(Organizer, PasswordSetupToken.organizer_id == Organizer.id)
+                .where(
+                    PasswordSetupToken.token_hash == _setup_token_hash(token),
+                    PasswordSetupToken.used_at.is_(None),
+                    PasswordSetupToken.expires_at > now,
+                    Organizer.active.is_(True),
+                )
+            )
+        ).one_or_none()
+        return row
+
+
+@auth_bp.get("/password-setup/<token:str>")
+async def password_setup_details(request: Request, token: str):
+    row = await _valid_setup_token(request, token)
+    if not row:
+        raise InvalidUsage("This password setup link is invalid or expired")
+    _setup_token, organizer = row
+    return {"email": organizer.email, "display_name": organizer.display_name}
+
+
+@auth_bp.post("/password-setup/<token:str>")
+async def set_password(request: Request, token: str):
+    payload = PasswordSet.model_validate(request.json or {})
+    now = datetime.now(UTC)
+    async with request.app.ctx.db.session() as db:
+        row = (
+            await db.execute(
+                select(PasswordSetupToken, Organizer)
+                .join(Organizer, PasswordSetupToken.organizer_id == Organizer.id)
+                .where(
+                    PasswordSetupToken.token_hash == _setup_token_hash(token),
+                    PasswordSetupToken.used_at.is_(None),
+                    PasswordSetupToken.expires_at > now,
+                    Organizer.active.is_(True),
+                )
+                .with_for_update()
+            )
+        ).one_or_none()
+        if not row:
+            raise InvalidUsage("This password setup link is invalid or expired")
+        setup_token, organizer = row
+        organizer.password_hash = hash_password(payload.password)
+        organizer.session_version += 1
+        setup_token.used_at = now
+        db.add(
+            AuditEvent(
+                actor_id=organizer.id,
+                action="auth.password_set",
+                entity_type="organizer",
+                entity_id=str(organizer.id),
+                request_id=getattr(request.ctx, "request_id", None),
+            )
+        )
+    return {"password_set": True}
+
+
+@auth_bp.post("/password")
+@admin_required()
+async def change_password(request: Request):
+    payload = PasswordChange.model_validate(request.json or {})
+    async with request.app.ctx.db.session() as db:
+        organizer = await db.get(Organizer, request.ctx.organizer.id)
+        if not organizer or not verify_password(payload.current_password, organizer.password_hash):
+            raise Unauthorized("Current password is incorrect")
+        organizer.password_hash = hash_password(payload.password)
+        organizer.session_version += 1
+        db.add(
+            AuditEvent(
+                actor_id=organizer.id,
+                action="auth.password_changed",
+                entity_type="organizer",
+                entity_id=str(organizer.id),
+                request_id=getattr(request.ctx, "request_id", None),
+            )
+        )
+    response = json({"password_changed": True})
     response.delete_cookie("pdc_session", path="/")
     return response
 

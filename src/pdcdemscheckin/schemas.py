@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from .models import MeetingStatus
+from .models import MeetingStatus, OrganizerRole
 
 
 class ApiModel(BaseModel):
@@ -71,3 +71,23 @@ class MergeProfiles(ApiModel):
     source_profile_id: UUID
     target_profile_id: UUID
     reason: str = Field(min_length=3, max_length=500)
+
+
+class OrganizerCreate(ApiModel):
+    email: EmailStr
+    display_name: str = Field(min_length=1, max_length=180)
+    role: OrganizerRole = OrganizerRole.admin
+
+
+class OrganizerUpdate(ApiModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=180)
+    role: OrganizerRole | None = None
+    active: bool | None = None
+
+
+class PasswordSet(ApiModel):
+    password: str = Field(min_length=12, max_length=128)
+
+
+class PasswordChange(PasswordSet):
+    current_password: str = Field(min_length=1, max_length=128)

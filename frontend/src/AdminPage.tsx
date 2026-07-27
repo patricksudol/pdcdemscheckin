@@ -7,10 +7,14 @@ import {
   ClipboardCheck,
   Download,
   ExternalLink,
+  KeyRound,
   Menu,
   Plus,
   QrCode,
+  RefreshCw,
   Search,
+  ShieldCheck,
+  UserCog,
   Users,
   X,
 } from "lucide-react";
@@ -27,6 +31,7 @@ import {
 import { Brand, Button, EmptyState, Field, StatusBadge } from "./components";
 
 interface Me {
+  id: string;
   display_name: string;
   email: string;
   role: string;
@@ -57,6 +62,10 @@ export function AdminPage() {
           <a href="/admin" className={window.location.pathname === "/admin" ? "active" : ""}><BarChart3 />Overview</a>
           <a href="/admin/meetings" className={window.location.pathname === "/admin/meetings" ? "active" : ""}><CalendarDays />Meetings</a>
           <a href="/admin/profiles" className={window.location.pathname === "/admin/profiles" ? "active" : ""}><Users />Profiles</a>
+          {organizer.role === "owner" && (
+            <a href="/admin/organizers" className={window.location.pathname === "/admin/organizers" ? "active" : ""}><UserCog />Organizers</a>
+          )}
+          <a href="/admin/security" className={window.location.pathname === "/admin/security" ? "active" : ""}><KeyRound />My password</a>
         </nav>
         <div className="sidebar__user">
           <div>{organizer.display_name.charAt(0)}</div>
@@ -78,7 +87,11 @@ export function AdminPage() {
             Sign out
           </button>
         </header>
-        {window.location.pathname === "/admin/meetings" ? (
+        {window.location.pathname === "/admin/organizers" && organizer.role === "owner" ? (
+          <Organizers currentId={organizer.id} />
+        ) : window.location.pathname === "/admin/security" ? (
+          <AccountSecurity />
+        ) : window.location.pathname === "/admin/meetings" ? (
           <Meetings />
         ) : window.location.pathname === "/admin/profiles" ? (
           <Profiles />
@@ -310,6 +323,180 @@ function Profiles() {
           ))}
         </div>
         {!profiles.data?.length && <EmptyState icon={<Users />} title="No profiles found">Profiles appear when attendees first check in.</EmptyState>}
+      </section>
+    </main>
+  );
+}
+
+interface OrganizerAccount {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "owner" | "admin";
+  active: boolean;
+  password_set: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+interface AuthActivity {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  created_at: string;
+}
+
+function Organizers({ currentId }: { currentId: string }) {
+  const queryClient = useQueryClient();
+  const [creating, setCreating] = useState(false);
+  const [setupUrl, setSetupUrl] = useState("");
+  const organizers = useQuery({
+    queryKey: ["organizers"],
+    queryFn: () => api<OrganizerAccount[]>("/api/v1/admin/organizers"),
+  });
+  const activity = useQuery({
+    queryKey: ["organizer-activity"],
+    queryFn: () => api<AuthActivity[]>("/api/v1/admin/organizers/activity"),
+  });
+  const create = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      return api<OrganizerAccount & { setup_url: string }>("/api/v1/admin/organizers", {
+        method: "POST",
+        body: JSON.stringify({
+          display_name: data.get("display_name"),
+          email: data.get("email"),
+          role: data.get("role"),
+        }),
+      });
+    },
+    onSuccess(data) {
+      queryClient.invalidateQueries({ queryKey: ["organizers"] });
+      setCreating(false);
+      setSetupUrl(data.setup_url);
+    },
+  });
+  const update = useMutation({
+    mutationFn: ({ id, changes }: { id: string; changes: Partial<OrganizerAccount> }) =>
+      api<OrganizerAccount>(`/api/v1/admin/organizers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizers"] }),
+  });
+  const setupLink = useMutation({
+    mutationFn: (id: string) =>
+      api<{ setup_url: string }>(`/api/v1/admin/organizers/${id}/setup-link`, {
+        method: "POST",
+      }),
+    onSuccess(data) {
+      setSetupUrl(data.setup_url);
+      queryClient.invalidateQueries({ queryKey: ["organizer-activity"] });
+    },
+  });
+  const organizerById = new Map(organizers.data?.map((item) => [item.id, item]));
+
+  return (
+    <main className="admin-content">
+      <div className="title-action">
+        <PageTitle eyebrow="Access control" title="Organizers" subtitle="Provision accounts without sharing passwords." />
+        <Button onClick={() => setCreating(true)}><Plus size={18} />New organizer</Button>
+      </div>
+      <section className="panel">
+        <div className="organizer-table">
+          <div className="organizer-table__header"><span>Organizer</span><span>Role</span><span>Last sign-in</span><span>Account</span><span>Actions</span></div>
+          {organizers.data?.map((item) => (
+            <div className="organizer-table__row" key={item.id}>
+              <span><div className="avatar">{item.display_name.charAt(0)}</div><span><strong>{item.display_name}</strong><small>{item.email}</small></span></span>
+              <select
+                aria-label={`Role for ${item.display_name}`}
+                value={item.role}
+                disabled={item.id === currentId || update.isPending}
+                onChange={(event) => update.mutate({ id: item.id, changes: { role: event.target.value as "owner" | "admin" } })}
+              >
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
+              </select>
+              <span>{item.last_login_at ? new Date(item.last_login_at).toLocaleString() : "Never"}</span>
+              <span className={`status status--${item.active ? "open" : "closed"}`}>{item.active ? (item.password_set ? "Active" : "Setup pending") : "Inactive"}</span>
+              <span className="organizer-actions">
+                <Button variant="quiet" onClick={() => setupLink.mutate(item.id)} busy={setupLink.isPending}><RefreshCw size={15} />Setup link</Button>
+                {item.id !== currentId && (
+                  <Button
+                    variant={item.active ? "danger" : "secondary"}
+                    onClick={() => update.mutate({ id: item.id, changes: { active: !item.active } })}
+                    busy={update.isPending}
+                  >
+                    {item.active ? "Deactivate" : "Reactivate"}
+                  </Button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel__head"><div><span className="eyebrow">Security log</span><h2>Recent account activity</h2></div></div>
+        <div className="activity-list">
+          {activity.data?.map((event) => {
+            const actor = event.actor_id ? organizerById.get(event.actor_id) : null;
+            return <div key={event.id}><ShieldCheck size={18} /><span><strong>{event.action.replace("auth.", "").replaceAll("_", " ")}</strong><small>{actor?.display_name ?? "Unrecognized sign-in"} · {new Date(event.created_at).toLocaleString()}</small></span></div>;
+          })}
+          {!activity.data?.length && <p className="panel-note">No authentication activity recorded yet.</p>}
+        </div>
+      </section>
+
+      {creating && (
+        <Modal title="Create organizer" onClose={() => setCreating(false)}>
+          <form className="modal-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); create.mutate(event.currentTarget); }}>
+            <Field label="Display name" name="display_name" required autoFocus />
+            <Field label="Email" name="email" type="email" autoComplete="off" required />
+            <label className="field"><span>Role</span><select name="role" defaultValue="admin"><option value="admin">Admin</option><option value="owner">Owner</option></select><small>Owners can manage other organizer accounts.</small></label>
+            {create.isError && <div className="form-error">{create.error.message}</div>}
+            <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setCreating(false)}>Cancel</Button><Button busy={create.isPending}>Create and generate link</Button></div>
+          </form>
+        </Modal>
+      )}
+      {setupUrl && (
+        <Modal title="Password setup link" onClose={() => setSetupUrl("")}>
+          <div className="modal-form">
+            <p>Send this one-time link securely to the organizer. It expires in 24 hours.</p>
+            <div className="share-box"><div><code>{setupUrl}</code><Button variant="quiet" onClick={() => navigator.clipboard.writeText(setupUrl)}>Copy</Button></div></div>
+            <div className="modal-actions"><Button onClick={() => setSetupUrl("")}>Done</Button></div>
+          </div>
+        </Modal>
+      )}
+    </main>
+  );
+}
+
+function AccountSecurity() {
+  const change = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      const password = String(data.get("password"));
+      if (password !== data.get("confirm_password")) throw new Error("New passwords do not match");
+      return api("/api/v1/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: data.get("current_password"), password }),
+      });
+    },
+    onSuccess: () => {
+      setCsrfToken(null);
+      window.location.assign("/admin");
+    },
+  });
+  return (
+    <main className="admin-content">
+      <PageTitle eyebrow="Account security" title="Change password" subtitle="Changing your password signs out your existing organizer session." />
+      <section className="panel security-panel">
+        <form className="modal-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); change.mutate(event.currentTarget); }}>
+          <Field label="Current password" name="current_password" type="password" autoComplete="current-password" required />
+          <Field label="New password" name="password" type="password" minLength={12} maxLength={128} autoComplete="new-password" hint="Use at least 12 characters." required />
+          <Field label="Confirm new password" name="confirm_password" type="password" minLength={12} maxLength={128} autoComplete="new-password" required />
+          {change.isError && <div className="form-error">{change.error.message}</div>}
+          <Button busy={change.isPending}>Change password</Button>
+        </form>
       </section>
     </main>
   );
