@@ -25,4 +25,4 @@ COPY --from=frontend /app/frontend/dist frontend/dist
 RUN uv sync --frozen --no-dev && chown -R app:app /app
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && python -m pdcdemscheckin.seed && sanic pdcdemscheckin.app:app --host=0.0.0.0 --port=${PORT:-8000} --workers=1"]
+CMD ["sh", "-c", "exec sanic pdcdemscheckin.app:app --host=0.0.0.0 --port=${PORT:-8000} --workers=1"]

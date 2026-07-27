@@ -1,4 +1,7 @@
-# AWS deployment
+# Alternative AWS deployment
+
+Render is the primary deployment target; see the root `render.yaml` and deployment section in the
+main README. These notes describe the more involved AWS alternative.
 
 The application is packaged as one container for AWS App Runner. PostgreSQL runs in a private
 Amazon RDS instance and is reached through an App Runner VPC connector.

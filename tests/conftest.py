@@ -22,6 +22,8 @@ def app(tmp_path_factory: pytest.TempPathFactory):
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_database(app):
+    app.ctx.login_attempts.clear()
+    app.asgi_client.cookies.clear()
     async with app.ctx.db.engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)

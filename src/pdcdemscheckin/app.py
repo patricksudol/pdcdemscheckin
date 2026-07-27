@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict, deque
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -22,6 +23,7 @@ def create_app(
     app.config.FALLBACK_ERROR_FORMAT = "json"
     app.ctx.settings = settings
     app.ctx.db = Database(settings.database_url)
+    app.ctx.login_attempts = defaultdict(deque)
     app.blueprint(auth_bp)
     app.blueprint(public_bp)
     app.blueprint(admin_bp)

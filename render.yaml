@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: pdcdemscheckin
+    runtime: docker
+    plan: starter
+    region: virginia
+    branch: main
+    autoDeployTrigger: checksPass
+    healthCheckPath: /api/ready
+    preDeployCommand: alembic upgrade head
+    initialDeployHook: python -m pdcdemscheckin.seed
+    domains:
+      - checkins.phoenixvilledems.org
+    envVars:
+      - key: PDC_ENVIRONMENT
+        value: production
+      - key: PDC_DATABASE_URL
+        fromDatabase:
+          name: pdcdemscheckin-db
+          property: connectionString
+      - key: PDC_PUBLIC_BASE_URL
+        value: https://checkins.phoenixvilledems.org
+      - key: PDC_SESSION_SECRET
+        generateValue: true
+      - key: PDC_SECURE_COOKIES
+        value: "true"
+      - key: PDC_SEED_ADMIN_EMAIL
+        sync: false
+      - key: PDC_SEED_ADMIN_PASSWORD
+        sync: false
+      - key: PDC_SEED_ADMIN_NAME
+        sync: false
+
+databases:
+  - name: pdcdemscheckin-db
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: "17"
+    databaseName: pdcdemscheckin
+    user: pdc
+    diskSizeGB: 1
+    storageAutoscalingEnabled: true
+    ipAllowList: []

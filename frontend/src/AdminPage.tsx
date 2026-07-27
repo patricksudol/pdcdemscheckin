@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -15,18 +15,30 @@ import {
   X,
 } from "lucide-react";
 
-import { api, Checkin, formatMeetingDate, Meeting, MeetingStatus, Profile } from "./api";
+import {
+  api,
+  Checkin,
+  formatMeetingDate,
+  Meeting,
+  MeetingStatus,
+  Profile,
+  setCsrfToken,
+} from "./api";
 import { Brand, Button, EmptyState, Field, StatusBadge } from "./components";
 
 interface Me {
   display_name: string;
   email: string;
   role: string;
+  csrf_token: string;
 }
 
 export function AdminPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("/api/v1/auth/me"), retry: false });
+  useEffect(() => {
+    setCsrfToken(me.data?.csrf_token ?? null);
+  }, [me.data?.csrf_token]);
 
   if (me.isLoading) return <div className="app-loading">Loading organizer workspace…</div>;
   const organizer = me.data;
@@ -55,7 +67,16 @@ export function AdminPage() {
         <header className="admin-topbar">
           <button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)}><Menu /></button>
           <div><span>Organizer workspace</span><strong>Phoenixville Democrats</strong></div>
-          <form method="post" action="/api/v1/auth/logout"><button className="text-button">Sign out</button></form>
+          <button
+            className="text-button"
+            onClick={async () => {
+              await api("/api/v1/auth/logout", { method: "POST" });
+              setCsrfToken(null);
+              window.location.assign("/");
+            }}
+          >
+            Sign out
+          </button>
         </header>
         {window.location.pathname === "/admin/meetings" ? (
           <Meetings />
@@ -74,11 +95,14 @@ function OrganizerLogin({ onSignedIn }: { onSignedIn: () => void }) {
   const [password, setPassword] = useState("");
   const login = useMutation({
     mutationFn: () =>
-      api<{ signed_in: boolean }>("/api/v1/auth/login", {
+      api<{ signed_in: boolean; csrf_token: string }>("/api/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       }),
-    onSuccess: onSignedIn,
+    onSuccess(data) {
+      setCsrfToken(data.csrf_token);
+      onSignedIn();
+    },
   });
 
   return (

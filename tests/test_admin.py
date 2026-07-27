@@ -1,13 +1,26 @@
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import select
 
 from pdcdemscheckin.auth import issue_session
 from pdcdemscheckin.models import AuditEvent, Meeting, MeetingStatus
 
+CSRF_TOKEN = "test-csrf-token"
+
 
 def session_cookie(app, organizer):
-    return {"pdc_session": issue_session(organizer, app.ctx.settings)}
+    return {
+        "pdc_session": issue_session(
+            organizer,
+            app.ctx.settings,
+            csrf_token=CSRF_TOKEN,
+        )
+    }
+
+
+def csrf_headers():
+    return {"X-CSRF-Token": CSRF_TOKEN}
 
 
 @pytest.mark.asyncio
@@ -26,6 +39,7 @@ async def test_opening_meeting_closes_previous_active(app, open_meeting, organiz
         f"/api/v1/admin/meetings/{next_meeting.id}/status",
         json={"status": "open"},
         cookies=session_cookie(app, organizer),
+        headers=csrf_headers(),
     )
     assert response.status == 200
     assert response.json["status"] == "open"
@@ -52,7 +66,8 @@ async def test_organizer_can_sign_in_with_password(app, organizer):
         json={"email": organizer.email.upper(), "password": "test-password"},
     )
     assert response.status == 200
-    assert response.json == {"signed_in": True}
+    assert response.json["signed_in"] is True
+    assert response.json["csrf_token"]
     assert response.cookies["pdc_session"]
 
 
@@ -63,3 +78,39 @@ async def test_organizer_login_rejects_wrong_password(app, organizer):
         json={"email": organizer.email, "password": "wrong-password"},
     )
     assert response.status == 401
+
+    async with app.ctx.db.session() as db:
+        events = (await db.scalars(select(AuditEvent))).all()
+        assert len(events) == 1
+        assert events[0].action == "auth.login_failed"
+
+
+@pytest.mark.asyncio
+async def test_admin_mutation_requires_csrf(app, open_meeting, organizer):
+    _request, response = await app.asgi_client.patch(
+        f"/api/v1/admin/meetings/{open_meeting.id}/status",
+        json={"status": "closed"},
+        cookies=session_cookie(app, organizer),
+    )
+    assert response.status == 403
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit(app, organizer):
+    app.ctx.settings.login_rate_limit = 2
+    try:
+        for _attempt in range(2):
+            _request, response = await app.asgi_client.post(
+                "/api/v1/auth/login",
+                json={"email": organizer.email, "password": "wrong-password"},
+            )
+            assert response.status == 401
+
+        _request, limited = await app.asgi_client.post(
+            "/api/v1/auth/login",
+            json={"email": organizer.email, "password": "wrong-password"},
+        )
+        assert limited.status == 429
+    finally:
+        app.ctx.settings.login_rate_limit = 5
+        app.ctx.login_attempts.clear()

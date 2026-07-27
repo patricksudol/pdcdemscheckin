@@ -15,10 +15,17 @@ services:
 
   app:
     build: .
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        python -m pdcdemscheckin.seed &&
+        exec sanic pdcdemscheckin.app:app --host=0.0.0.0 --port=8000 --workers=1
     ports:
       - "8000:8000"
     environment:
-      PDC_ENVIRONMENT: production
+      PDC_ENVIRONMENT: development
       PDC_DATABASE_URL: postgresql+psycopg://pdc:pdc@db:5432/pdcdemscheckin
       PDC_PUBLIC_BASE_URL: ${PDC_PUBLIC_BASE_URL:-http://localhost:8000}
       PDC_SESSION_SECRET: ${PDC_SESSION_SECRET:-local-compose-secret-change-for-production}

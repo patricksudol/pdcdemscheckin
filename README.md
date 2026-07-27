@@ -250,11 +250,43 @@ curl --fail http://127.0.0.1:8000/api/health
 
 ## Deployment
 
-The target production URL is `https://checkins.phoenixvilledems.org`. The existing Wix site can
-link or redirect its `/checkin` page to that subdomain without moving the Wix site itself.
+Render is the primary production target. The checked-in `render.yaml` Blueprint creates:
 
-See [infra/README.md](infra/README.md) for the AWS App Runner, private RDS, VPC, secrets, DNS, and
-backup requirements.
+- a Starter Docker web service in Virginia;
+- a private Basic-256MB PostgreSQL 17 database;
+- a generated session-signing secret;
+- a database migration pre-deploy command;
+- a one-time organizer seed hook;
+- readiness checks at `/api/ready`; and
+- deployment from `main` only after GitHub CI passes.
+
+### First deployment
+
+1. In Render, choose **New > Blueprint** and connect this repository.
+2. During the initial Blueprint form, provide a real organizer email, a unique password of at
+   least 12 characters, and the organizer's display name for the three `PDC_SEED_ADMIN_*`
+   variables.
+3. Apply the Blueprint and wait for the database, migration, initial seed, and web service to
+   complete.
+4. Verify `/api/ready`, sign in at `/admin`, and confirm a test meeting and QR code.
+5. Remove `PDC_SEED_ADMIN_EMAIL` and `PDC_SEED_ADMIN_PASSWORD` from the Render service after the
+   organizer exists. The seed is idempotent, but production credentials should not remain in the
+   runtime environment.
+6. In Wix DNS, point the `checkins` CNAME to the hostname Render supplies and verify the custom
+   domain in Render.
+
+The target URL is `https://checkins.phoenixvilledems.org`. Wix should link its **Check In** menu
+item to that URL; the app intentionally prevents iframe embedding.
+
+Production settings are validated at startup. Production refuses to run with SQLite, HTTP, an
+insecure cookie, or a short/default session secret. Render's `postgresql://` connection string is
+automatically normalized to the Psycopg 3 SQLAlchemy driver.
+
+The GitHub Actions workflow runs backend lint and tests plus frontend lint and build checks.
+Render waits for those checks before deploying.
+
+AWS App Runner remains an alternative target. See [infra/README.md](infra/README.md) for the older
+AWS architecture notes.
 
 ## GitHub
 
