@@ -98,3 +98,8 @@ class PasswordSet(ApiModel):
 
 class PasswordChange(PasswordSet):
     current_password: str = Field(min_length=1, max_length=128)
+
+
+class OneTapBackfill(ApiModel):
+    dry_run: bool = True
+    confirm: bool = False

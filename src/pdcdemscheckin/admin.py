@@ -21,11 +21,14 @@ from .models import (
     Checkin,
     CheckinSource,
     Meeting,
+    MeetingStatus,
     Organizer,
     OrganizerRole,
     PasswordSetupToken,
     Profile,
 )
+from .onetap import OneTapError
+from .onetap import export as onetap_export
 from .public import meeting_json, normalize_email, normalize_phone
 from .schemas import (
     AdminProfileCreate,
@@ -35,6 +38,7 @@ from .schemas import (
     MeetingStatusUpdate,
     MeetingUpdate,
     MergeProfiles,
+    OneTapBackfill,
     OrganizerCreate,
     OrganizerUpdate,
     ProfileUpdate,
@@ -126,6 +130,19 @@ async def audit(
             request_id=getattr(request.ctx, "request_id", None),
         )
     )
+
+
+def _onetap_time(value: Any) -> datetime:
+    try:
+        seconds = float(value)
+        return datetime.fromtimestamp(seconds / 1000 if seconds > 100_000_000_000 else seconds, UTC)
+    except (TypeError, ValueError, OSError):
+        return datetime.now(UTC)
+
+
+def _onetap_name(item: dict[str, Any]) -> tuple[str, str]:
+    parts = str(item.get("name") or "OneTap Profile").strip().split(maxsplit=1)
+    return parts[0][:100], (parts[1] if len(parts) > 1 else "Profile")[:100]
 
 
 @admin_bp.get("/dashboard")
@@ -399,11 +416,11 @@ async def list_profiles(request: Request):
 @admin_required()
 async def create_profile(request: Request):
     payload = AdminProfileCreate.model_validate(request.json or {})
-    email = normalize_email(str(payload.email))
+    email = normalize_email(str(payload.email)) if payload.email else None
     phone = normalize_phone(payload.phone)
     try:
         async with request.app.ctx.db.session() as db:
-            if await db.scalar(
+            if email and await db.scalar(
                 select(Profile).where(
                     Profile.normalized_email == email,
                     Profile.deleted_at.is_(None),
@@ -442,6 +459,122 @@ async def list_organizers(request: Request):
             await db.scalars(select(Organizer).order_by(Organizer.display_name))
         ).all()
         return [organizer_json(organizer) for organizer in organizers]
+
+
+@admin_bp.get("/onetap/status")
+@admin_required(owner_only=True)
+async def onetap_status(request: Request):
+    return {"configured": bool(request.app.ctx.settings.onetap_api_key)}
+
+
+@admin_bp.post("/onetap/backfill")
+@admin_required(owner_only=True)
+async def onetap_backfill(request: Request):
+    payload = OneTapBackfill.model_validate(request.json or {})
+    api_key = request.app.ctx.settings.onetap_api_key
+    if not api_key:
+        raise InvalidUsage("Configure PDC_ONETAP_API_KEY in Render first")
+    if not payload.dry_run and not payload.confirm:
+        raise InvalidUsage("Confirm the import before writing data")
+    try:
+        lists, source_profiles, participants = await onetap_export(api_key)
+    except OneTapError as error:
+        raise InvalidUsage(str(error)) from error
+    source_checkins = sum(
+        1 for rows in participants.values() for item in rows if item.get("checkedIn")
+    )
+    source = {"profiles": len(source_profiles), "meetings": len(lists), "checkins": source_checkins}
+    if payload.dry_run:
+        return {"dry_run": True, "source": source}
+    added = {"profiles": 0, "meetings": 0, "checkins": 0}
+    async with request.app.ctx.db.session() as db:
+        profiles = {
+            profile.normalized_email: profile
+            for profile in (
+                await db.scalars(select(Profile).where(Profile.deleted_at.is_(None)))
+            ).all()
+            if profile.normalized_email
+        }
+        meetings = {
+            (meeting.title, meeting.starts_at.replace(tzinfo=UTC)): meeting
+            for meeting in (await db.scalars(select(Meeting))).all()
+        }
+        imported_profiles: dict[str, Profile] = {}
+
+        def profile_for(item: dict[str, Any]) -> Profile:
+            source_id = str(item.get("id") or item.get("profileId") or "")
+            if source_id in imported_profiles:
+                return imported_profiles[source_id]
+            email = str(item.get("email") or "").strip()
+            normalized = normalize_email(email) if "@" in email else None
+            profile = profiles.get(normalized) if normalized else None
+            if not profile:
+                first_name, last_name = _onetap_name(item)
+                profile = Profile(
+                    first_name=first_name, last_name=last_name, email=normalized,
+                    normalized_email=normalized, phone=normalize_phone(item.get("phone")),
+                    consented_at=_onetap_time(
+                        item.get("registrationDate") or item.get("createdAt")
+                    ),
+                )
+                db.add(profile)
+                added["profiles"] += 1
+                if normalized:
+                    profiles[normalized] = profile
+            imported_profiles[source_id] = profile
+            return profile
+
+        for item in source_profiles:
+            profile_for(item)
+        await db.flush()
+        imported_meetings: dict[str, Meeting] = {}
+        for item in lists:
+            if not item.get("date"):
+                continue
+            starts_at = _onetap_time(item["date"])
+            title = str(item.get("name") or "OneTap meeting")[:180]
+            key = (title, starts_at)
+            meeting = meetings.get(key)
+            if not meeting:
+                meeting = Meeting(title=title, starts_at=starts_at, status=MeetingStatus.closed,
+                    public_token=secrets.token_urlsafe(24), created_by_id=request.ctx.organizer.id)
+                db.add(meeting)
+                meetings[key] = meeting
+                added["meetings"] += 1
+            imported_meetings[str(item.get("id"))] = meeting
+        await db.flush()
+        pairs = set((await db.execute(select(Checkin.meeting_id, Checkin.profile_id))).all())
+        for list_id, rows in participants.items():
+            meeting = imported_meetings.get(list_id)
+            if not meeting:
+                continue
+            for item in rows:
+                if not item.get("checkedIn"):
+                    continue
+                profile_data = (
+                    item.get("profile") if isinstance(item.get("profile"), dict) else item
+                )
+                profile = profile_for(
+                    {**profile_data, "id": item.get("profileId") or profile_data.get("id")}
+                )
+                if (meeting.id, profile.id) in pairs:
+                    continue
+                db.add(
+                    Checkin(
+                        meeting_id=meeting.id,
+                        profile_id=profile.id,
+                        checked_in_at=_onetap_time(
+                            item.get("checkInDate") or item.get("checkedInDate")
+                        ),
+                        source=CheckinSource.admin,
+                        corrected_by_id=request.ctx.organizer.id,
+                    )
+                )
+                pairs.add((meeting.id, profile.id))
+                added["checkins"] += 1
+        await audit(db, request, "onetap.backfill_completed", "onetap", "historical-data",
+                    before={"source": source}, after={"imported": added})
+    return {"dry_run": False, "source": source, "imported": added}
 
 
 @admin_bp.post("/organizers")

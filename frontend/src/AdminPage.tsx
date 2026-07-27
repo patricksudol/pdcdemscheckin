@@ -591,6 +591,12 @@ function Organizers({ currentId }: { currentId: string }) {
     queryKey: ["organizer-activity"],
     queryFn: () => api<AuthActivity[]>("/api/v1/admin/organizers/activity"),
   });
+  const onetapStatus = useQuery({ queryKey: ["onetap-status"], queryFn: () => api<{ configured: boolean }>("/api/v1/admin/onetap/status") });
+  const [onetapResult, setOnetapResult] = useState<{ dry_run: boolean; source: Record<string, number>; imported?: Record<string, number> } | null>(null);
+  const onetap = useMutation({
+    mutationFn: (dry_run: boolean) => api<{ dry_run: boolean; source: Record<string, number>; imported?: Record<string, number> }>("/api/v1/admin/onetap/backfill", { method: "POST", body: JSON.stringify({ dry_run, confirm: !dry_run }) }),
+    onSuccess(data) { setOnetapResult(data); queryClient.invalidateQueries({ queryKey: ["dashboard"] }); queryClient.invalidateQueries({ queryKey: ["meetings"] }); queryClient.invalidateQueries({ queryKey: ["profiles"] }); },
+  });
   const create = useMutation({
     mutationFn: (form: HTMLFormElement) => {
       const data = new FormData(form);
@@ -682,6 +688,15 @@ function Organizers({ currentId }: { currentId: string }) {
             </div>
           ))}
         </div>
+      </section>
+      <section className="panel security-panel">
+        <div className="panel__head"><div><span className="eyebrow">Migration</span><h2>OneTap historical backfill</h2></div></div>
+        {!onetapStatus.data?.configured ? <p>Add <code>PDC_ONETAP_API_KEY</code> as a Render secret, then redeploy.</p> : <>
+          <p>Preview the OneTap profiles, meetings, and checked-in participants before importing. Re-running uses matching profiles, meetings, and attendance to avoid duplicates.</p>
+          {onetapResult && <p className="panel-note">{onetapResult.dry_run ? "Found" : "Imported"}: {Object.entries(onetapResult.imported ?? onetapResult.source).map(([key, value]) => `${value} ${key}`).join(" · ")}</p>}
+          {onetap.isError && <div className="form-error">{onetap.error.message}</div>}
+          <div className="modal-actions import-actions"><Button variant="secondary" busy={onetap.isPending} onClick={() => onetap.mutate(true)}>Preview</Button><Button busy={onetap.isPending} disabled={!onetapResult?.dry_run} onClick={() => window.confirm("Import OneTap historical data now?") && onetap.mutate(false)}>Import historical data</Button></div>
+        </>}
       </section>
       <section className="panel">
         <div className="panel__head"><div><span className="eyebrow">Security log</span><h2>Recent account activity</h2></div></div>

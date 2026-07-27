@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     checkin_rate_limit: int = 30
     login_rate_limit: int = 5
     login_rate_window_seconds: int = 15 * 60
+    onetap_api_key: str = ""
 
     @field_validator("database_url", mode="before")
     @classmethod
