@@ -5,7 +5,6 @@ from pydantic import ValidationError
 from sanic import Request, Sanic
 from sanic.exceptions import SanicException
 from sanic.response import file, json
-from sanic_ext import Extend
 from sqlalchemy import text
 
 from .admin import admin_bp
@@ -21,7 +20,6 @@ def create_app(
     settings = settings or get_settings()
     app = Sanic(name)
     app.config.FALLBACK_ERROR_FORMAT = "json"
-    Extend(app)
     app.ctx.settings = settings
     app.ctx.db = Database(settings.database_url)
     app.blueprint(auth_bp)
@@ -33,14 +31,22 @@ def create_app(
         request.ctx.request_id = request.headers.get("x-request-id", str(uuid.uuid4()))
 
     @app.middleware("response")
-    async def security_headers(request: Request, response):
+    async def normalize_response(request: Request, response):
+        if isinstance(response, tuple):
+            body, status = response
+            response = json(body, status=status)
+        elif isinstance(response, (dict, list)):
+            response = json(response)
+
         response.headers["X-Request-ID"] = request.ctx.request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if settings.environment == "production":
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
         return response
 
     @app.exception(ValidationError)
@@ -49,7 +55,7 @@ def create_app(
             {
                 "error": "validation_error",
                 "message": "Please check the highlighted fields",
-                "details": error.errors(include_url=False),
+                "details": error.errors(include_url=False, include_context=False),
             },
             status=422,
         )

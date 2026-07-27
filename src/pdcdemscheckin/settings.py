@@ -1,7 +1,8 @@
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     session_secret: str = "development-only-change-me"
     google_client_id: str = ""
     google_client_secret: str = ""
-    admin_allowlist: tuple[str, ...] = Field(default_factory=tuple)
+    admin_allowlist: Annotated[tuple[str, ...], NoDecode] = Field(default_factory=tuple)
     frontend_dist: str = "frontend/dist"
     secure_cookies: bool = False
     session_max_age_seconds: int = 8 * 60 * 60
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
 
     @property
     def sync_database_url(self) -> str:
-        return self.database_url.replace("+asyncpg", "").replace("+aiosqlite", "")
+        return self.database_url.replace("+aiosqlite", "")
 
 
 @lru_cache

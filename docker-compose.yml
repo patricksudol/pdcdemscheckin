@@ -19,10 +19,12 @@ services:
       - "8000:8000"
     environment:
       PDC_ENVIRONMENT: production
-      PDC_DATABASE_URL: postgresql+asyncpg://pdc:pdc@db:5432/pdcdemscheckin
-      PDC_PUBLIC_BASE_URL: http://localhost:8000
-      PDC_SESSION_SECRET: local-compose-secret-change-for-production
-      PDC_ADMIN_ALLOWLIST: organizer@example.com
+      PDC_DATABASE_URL: postgresql+psycopg://pdc:pdc@db:5432/pdcdemscheckin
+      PDC_PUBLIC_BASE_URL: ${PDC_PUBLIC_BASE_URL:-http://localhost:8000}
+      PDC_SESSION_SECRET: ${PDC_SESSION_SECRET:-local-compose-secret-change-for-production}
+      PDC_GOOGLE_CLIENT_ID: ${PDC_GOOGLE_CLIENT_ID:-}
+      PDC_GOOGLE_CLIENT_SECRET: ${PDC_GOOGLE_CLIENT_SECRET:-}
+      PDC_ADMIN_ALLOWLIST: ${PDC_ADMIN_ALLOWLIST:-organizer@example.com}
       PDC_SECURE_COOKIES: "false"
     depends_on:
       db:

@@ -92,7 +92,7 @@ async def lookup_profile(request: Request, token: str):
     async with request.app.ctx.db.session() as db:
         meeting = await get_open_meeting(db, token)
         if meeting.status != MeetingStatus.open:
-            raise InvalidUsage("Check-in is not open for this meeting", status_code=409)
+            raise SanicException("Check-in is not open for this meeting", status_code=409)
         profile = (
             await db.execute(
                 select(Profile).where(
@@ -124,7 +124,7 @@ async def checkin_existing(request: Request, token: str):
     async with request.app.ctx.db.session() as db:
         meeting = await get_open_meeting(db, token)
         if meeting.status != MeetingStatus.open:
-            raise InvalidUsage("Check-in is not open for this meeting", status_code=409)
+            raise SanicException("Check-in is not open for this meeting", status_code=409)
         profile = (
             await db.execute(
                 select(Profile).where(
@@ -155,7 +155,7 @@ async def create_profile_and_checkin(request: Request, token: str):
     async with request.app.ctx.db.session() as db:
         meeting = await get_open_meeting(db, token)
         if meeting.status != MeetingStatus.open:
-            raise InvalidUsage("Check-in is not open for this meeting", status_code=409)
+            raise SanicException("Check-in is not open for this meeting", status_code=409)
         existing = (
             await db.execute(
                 select(Profile).where(
@@ -164,7 +164,7 @@ async def create_profile_and_checkin(request: Request, token: str):
             )
         ).scalar_one_or_none()
         if existing:
-            raise InvalidUsage("A profile already exists for that email", status_code=409)
+            raise SanicException("A profile already exists for that email", status_code=409)
         profile = Profile(
             first_name=payload.first_name.strip(),
             last_name=payload.last_name.strip(),

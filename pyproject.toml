@@ -6,16 +6,15 @@ readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
   "alembic>=1.16",
-  "asyncpg>=0.30",
   "email-validator>=2.2",
   "greenlet>=3.2",
   "httpx>=0.28",
   "itsdangerous>=2.2",
   "pydantic>=2.11",
   "pydantic-settings>=2.10",
+  "psycopg[binary]>=3.2",
   "qrcode[pil]>=8.2",
   "sanic>=25.12,<26",
-  "sanic-ext>=24.12",
   "sqlalchemy[asyncio]>=2.0.41",
 ]
 
