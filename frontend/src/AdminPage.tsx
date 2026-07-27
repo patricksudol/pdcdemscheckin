@@ -581,6 +581,8 @@ function Organizers({ currentId }: { currentId: string }) {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState(false);
   const [setupUrl, setSetupUrl] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<OrganizerAccount | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const organizers = useQuery({
     queryKey: ["organizers"],
     queryFn: () => api<OrganizerAccount[]>("/api/v1/admin/organizers"),
@@ -625,6 +627,18 @@ function Organizers({ currentId }: { currentId: string }) {
       queryClient.invalidateQueries({ queryKey: ["organizer-activity"] });
     },
   });
+  const remove = useMutation({
+    mutationFn: () => api(`/api/v1/admin/organizers/${deleteTarget?.id}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason: deleteReason }),
+    }),
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["organizers"] });
+      queryClient.invalidateQueries({ queryKey: ["organizer-activity"] });
+      setDeleteTarget(null);
+      setDeleteReason("");
+    },
+  });
   const organizerById = new Map(organizers.data?.map((item) => [item.id, item]));
 
   return (
@@ -651,15 +665,18 @@ function Organizers({ currentId }: { currentId: string }) {
               <span>{item.last_login_at ? new Date(item.last_login_at).toLocaleString() : "Never"}</span>
               <span className={`status status--${item.active ? "open" : "closed"}`}>{item.active ? (item.password_set ? "Active" : "Setup pending") : "Inactive"}</span>
               <span className="organizer-actions">
-                <Button variant="quiet" onClick={() => setupLink.mutate(item.id)} busy={setupLink.isPending}><RefreshCw size={15} />Setup link</Button>
+                <Button variant="quiet" onClick={() => setupLink.mutate(item.id)} busy={setupLink.isPending}><RefreshCw size={15} />Reset password</Button>
                 {item.id !== currentId && (
-                  <Button
-                    variant={item.active ? "danger" : "secondary"}
-                    onClick={() => update.mutate({ id: item.id, changes: { active: !item.active } })}
-                    busy={update.isPending}
-                  >
-                    {item.active ? "Deactivate" : "Reactivate"}
-                  </Button>
+                  <>
+                    <Button
+                      variant={item.active ? "danger" : "secondary"}
+                      onClick={() => update.mutate({ id: item.id, changes: { active: !item.active } })}
+                      busy={update.isPending}
+                    >
+                      {item.active ? "Deactivate" : "Reactivate"}
+                    </Button>
+                    <Button variant="quiet" onClick={() => setDeleteTarget(item)} disabled={update.isPending || remove.isPending}><Trash2 size={15} />Delete</Button>
+                  </>
                 )}
               </span>
             </div>
@@ -694,6 +711,16 @@ function Organizers({ currentId }: { currentId: string }) {
             <p>Send this one-time link securely to the organizer. It expires in 24 hours.</p>
             <div className="share-box"><div><code>{setupUrl}</code><Button variant="quiet" onClick={() => navigator.clipboard.writeText(setupUrl)}>Copy</Button></div></div>
             <div className="modal-actions"><Button onClick={() => setSetupUrl("")}>Done</Button></div>
+          </div>
+        </Modal>
+      )}
+      {deleteTarget && (
+        <Modal title="Delete organizer" onClose={() => setDeleteTarget(null)}>
+          <div className="modal-form">
+            <p>Delete {deleteTarget.display_name}'s organizer account? They will immediately lose access. Meeting and attendance records will remain, and the deletion will be logged.</p>
+            <Field label="Reason for deletion" name="organizer-delete-reason" value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} minLength={3} required autoFocus />
+            {remove.isError && <div className="form-error">{remove.error.message}</div>}
+            <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setDeleteTarget(null)}>Cancel</Button><Button type="button" variant="danger" busy={remove.isPending} disabled={deleteReason.trim().length < 3} onClick={() => remove.mutate()}>Delete organizer</Button></div>
           </div>
         </Modal>
       )}

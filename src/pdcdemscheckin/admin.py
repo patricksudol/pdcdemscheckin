@@ -524,6 +524,55 @@ async def update_organizer(request: Request, organizer_id: UUID):
         return organizer_json(organizer)
 
 
+@admin_bp.delete("/organizers/<organizer_id:uuid>")
+@admin_required(owner_only=True)
+async def delete_organizer(request: Request, organizer_id: UUID):
+    payload = CorrectionReason.model_validate(request.json or {})
+    async with request.app.ctx.db.session() as db:
+        organizer = await db.get(Organizer, organizer_id)
+        if not organizer:
+            raise NotFound("Organizer not found")
+        if organizer.id == request.ctx.organizer.id:
+            raise InvalidUsage("You cannot delete your own owner account")
+        if organizer.role == OrganizerRole.owner and organizer.active:
+            active_owner_count = await db.scalar(
+                select(func.count(Organizer.id)).where(
+                    Organizer.role == OrganizerRole.owner,
+                    Organizer.active.is_(True),
+                )
+            )
+            if (active_owner_count or 0) <= 1:
+                raise InvalidUsage("At least one active owner is required")
+        before = organizer_json(organizer)
+        await db.execute(
+            update(Meeting)
+            .where(Meeting.created_by_id == organizer.id)
+            .values(created_by_id=None)
+        )
+        await db.execute(
+            update(Checkin)
+            .where(Checkin.corrected_by_id == organizer.id)
+            .values(corrected_by_id=None)
+        )
+        await db.execute(
+            update(AuditEvent)
+            .where(AuditEvent.actor_id == organizer.id)
+            .values(actor_id=None)
+        )
+        await db.delete(organizer)
+        await audit(
+            db,
+            request,
+            "organizer.deleted",
+            "organizer",
+            organizer_id,
+            reason=payload.reason,
+            before=before,
+            after={"deleted": True},
+        )
+        return {"deleted": True}
+
+
 @admin_bp.post("/organizers/<organizer_id:uuid>/setup-link")
 @admin_required(owner_only=True)
 async def regenerate_setup_link(request: Request, organizer_id: UUID):

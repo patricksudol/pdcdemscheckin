@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 from sqlalchemy import select
 
-from pdcdemscheckin.auth import issue_session, verify_password
+from pdcdemscheckin.auth import hash_password, issue_session, verify_password
 from pdcdemscheckin.models import (
     AuditEvent,
     Checkin,
@@ -318,6 +318,59 @@ async def test_owner_cannot_demote_or_deactivate_self(app, organizer):
             headers=csrf_headers(),
         )
         assert response.status == 400
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_other_organizer_but_not_self_or_last_owner(app, organizer):
+    other_owner = Organizer(
+        email="other.owner@example.com",
+        display_name="Other Owner",
+        password_hash=hash_password("other-owner-password"),
+        role=OrganizerRole.owner,
+    )
+    admin = Organizer(
+        email="delete.admin@example.com",
+        display_name="Delete Admin",
+        password_hash=hash_password("delete-admin-password"),
+        role=OrganizerRole.admin,
+    )
+    async with app.ctx.db.session() as db:
+        db.add_all([other_owner, admin])
+        await db.flush()
+
+    cookies = session_cookie(app, organizer)
+    _request, response = await app.asgi_client.request(
+        "DELETE",
+        f"/api/v1/admin/organizers/{admin.id}",
+        json={"reason": "No longer serving"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+
+    _request, response = await app.asgi_client.request(
+        "DELETE",
+        f"/api/v1/admin/organizers/{organizer.id}",
+        json={"reason": "Self removal"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 400
+
+    _request, response = await app.asgi_client.request(
+        "DELETE",
+        f"/api/v1/admin/organizers/{other_owner.id}",
+        json={"reason": "No longer serving"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+
+    async with app.ctx.db.session() as db:
+        assert await db.get(Organizer, admin.id) is None
+        assert await db.get(Organizer, other_owner.id) is None
+        event = await db.scalar(select(AuditEvent).where(AuditEvent.action == "organizer.deleted"))
+        assert event
 
 
 @pytest.mark.asyncio
