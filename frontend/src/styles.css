@@ -81,6 +81,21 @@ h2 { font-size: 1.8rem; }
 .welcome-orb { margin: 0 auto 1.3rem; width: 62px; height: 62px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(145deg, #0f4c85, #8c36d6); color: white; font: 400 2rem "League Gothic", Impact, sans-serif; }
 .success__ring { width: 88px; height: 88px; border-radius: 50%; margin: 0 auto 1.5rem; display: grid; place-items: center; background: #e6f5ef; color: var(--green); border: 7px solid #f1faf6; animation: pop .4s ease-out; }
 @keyframes pop { from { transform: scale(.5); opacity: 0; } }
+.phoenix-celebration { width: 142px; height: 132px; margin: -1.4rem auto -.1rem; pointer-events: none; animation: phoenix-rise 1.65s cubic-bezier(.16,.8,.28,1) both; }
+.phoenix-celebration svg { width: 100%; height: 100%; overflow: visible; }
+.phoenix__bird { fill: url(#phoenix-blue); transform-origin: 80px 84px; animation: phoenix-hover .48s ease-in-out 3 alternate; }
+.phoenix__wing { transform-box: fill-box; }
+.phoenix__wing--left { transform-origin: right bottom; animation: phoenix-wing-left .45s ease-in-out 3 alternate; }
+.phoenix__wing--right { transform-origin: left bottom; animation: phoenix-wing-right .45s ease-in-out 3 alternate; }
+.phoenix__body { fill: #0f4c85; }
+.phoenix__head { fill: #9bd7ff; }
+.phoenix__tail { fill: #3579b7; }
+.phoenix__flames { fill: #54b8f4; transform-origin: 80px 122px; animation: phoenix-flames .25s ease-in-out 6 alternate; }
+@keyframes phoenix-rise { from { opacity: 0; transform: translateY(2.2rem) scale(.72); } 35% { opacity: 1; } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes phoenix-hover { to { transform: translateY(-.35rem); } }
+@keyframes phoenix-wing-left { to { transform: rotate(-15deg) translate(-.3rem, -.1rem); } }
+@keyframes phoenix-wing-right { to { transform: rotate(15deg) translate(.3rem, -.1rem); } }
+@keyframes phoenix-flames { to { transform: scaleY(1.2) translateY(.35rem); opacity: .7; } }
 .notice-card { grid-column: 1 / -1; max-width: 570px; width: 100%; margin: auto; }
 .empty-state__icon { width: 52px; height: 52px; border-radius: 15px; background: #eaf0f6; color: var(--navy); display: grid; place-items: center; margin: 0 auto 1rem; }
 .skeleton-card div, .admin-skeleton div { height: 18px; border-radius: 8px; margin: 1rem 0; background: linear-gradient(90deg,#edf0f2,#f8f9fa,#edf0f2); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
@@ -269,6 +284,7 @@ h2 { font-size: 1.8rem; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  .phoenix-celebration { display: none; }
 }
 
 /* Phoenixville Democrats campaign-site visual system */

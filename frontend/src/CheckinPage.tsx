@@ -265,6 +265,7 @@ export function CheckinPage({ token }: { token: string }) {
 
         {step === "done" && (
           <div className="success">
+            {!alreadyCheckedIn && <PhoenixCelebration />}
             <div className="success__ring"><Check size={38} strokeWidth={3} /></div>
             <div className="step-label">{alreadyCheckedIn ? "Already recorded" : "You’re checked in"}</div>
             <h1>{alreadyCheckedIn ? `You’re all set, ${firstName}.` : `Thanks for being here, ${firstName}!`}</h1>
@@ -277,6 +278,34 @@ export function CheckinPage({ token }: { token: string }) {
         )}
       </main>
     </PageShell>
+  );
+}
+
+function PhoenixCelebration() {
+  return (
+    <div className="phoenix-celebration" aria-hidden="true">
+      <svg viewBox="0 0 160 150" focusable="false">
+        <defs>
+          <linearGradient id="phoenix-blue" x1="0" x2="1" y1="1" y2="0">
+            <stop stopColor="#0f4c85" />
+            <stop offset=".55" stopColor="#3579b7" />
+            <stop offset="1" stopColor="#9bd7ff" />
+          </linearGradient>
+        </defs>
+        <g className="phoenix__flames">
+          <path d="M76 140c-16-17-8-29 0-42-1 15 11 20 4 42Z" />
+          <path d="M91 139c-7-18 7-29 11-44 3 18 11 27-7 44Z" />
+          <path d="M60 133c-18-10-16-27-10-40 4 15 16 17 14 40Z" />
+        </g>
+        <g className="phoenix__bird">
+          <path className="phoenix__wing phoenix__wing--left" d="M77 79C54 47 26 47 18 23c23 3 43 14 57 35-8-25-3-39 8-48 7 23 4 46-6 69Z" />
+          <path className="phoenix__wing phoenix__wing--right" d="M83 78c23-31 51-30 59-55-23 3-43 14-57 35 8-25 3-39-8-48-7 23-4 46 6 68Z" />
+          <path className="phoenix__body" d="M80 39c-10 16-12 36-5 54l5 15 5-15c7-18 5-38-5-54Z" />
+          <path className="phoenix__head" d="M79 39c-4-12 2-22 11-27-1 11 6 15 12 17-8 3-13 9-17 17Z" />
+          <path className="phoenix__tail" d="M76 93c-8 15-22 24-35 30 17-1 28-7 38-17l1 22 8-22c11 10 22 16 39 17-15-8-28-18-36-31Z" />
+        </g>
+      </svg>
+    </div>
   );
 }
 
