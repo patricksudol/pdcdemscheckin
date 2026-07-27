@@ -262,6 +262,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [manualCheckin, setManualCheckin] = useState(false);
+  const [creatingManualProfile, setCreatingManualProfile] = useState(false);
   const [profileSearch, setProfileSearch] = useState("");
   const attendance = useQuery({
     queryKey: ["meeting-checkins", meeting.id],
@@ -303,6 +304,11 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
     queryFn: () => api<Profile[]>(`/api/v1/admin/profiles?q=${encodeURIComponent(profileSearch)}`),
     enabled: manualCheckin && profileSearch.trim().length >= 2,
   });
+  const closeManualCheckin = () => {
+    setManualCheckin(false);
+    setCreatingManualProfile(false);
+    setProfileSearch("");
+  };
   const checkIn = useMutation({
     mutationFn: (profileId: string) =>
       api<{ id: string; created: boolean }>(`/api/v1/admin/meetings/${meeting.id}/checkins`, {
@@ -313,8 +319,28 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
       queryClient.invalidateQueries({ queryKey: ["meeting-checkins", meeting.id] });
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      setManualCheckin(false);
-      setProfileSearch("");
+      closeManualCheckin();
+    },
+  });
+  const createAndCheckIn = useMutation({
+    mutationFn: (form: HTMLFormElement) => {
+      const data = new FormData(form);
+      return api<{ id: string; created: boolean }>(`/api/v1/admin/meetings/${meeting.id}/checkins/new-profile`, {
+        method: "POST",
+        body: JSON.stringify({
+          first_name: data.get("first_name"),
+          last_name: data.get("last_name"),
+          email: data.get("email") || null,
+          phone: data.get("phone") || null,
+        }),
+      });
+    },
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["meeting-checkins", meeting.id] });
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      closeManualCheckin();
     },
   });
   const checkOut = useMutation({
@@ -340,7 +366,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
         <div className="drawer__head"><div><StatusBadge status={meeting.status} /><h2>{meeting.title}</h2><p>{formatMeetingDate(meeting.starts_at)}</p></div><button className="icon-button" onClick={onClose}><X /></button></div>
         <div className="drawer__actions">
           <Button variant="secondary" onClick={() => setEditing(true)}><Pencil size={17} />Edit</Button>
-          <Button variant="secondary" onClick={() => setManualCheckin(true)}><Plus size={17} />Manual check-in</Button>
+          <Button variant="secondary" onClick={() => { setCreatingManualProfile(false); setManualCheckin(true); }}><Plus size={17} />Manual check-in</Button>
           {meeting.status !== "open" ? <Button onClick={() => status.mutate("open")} busy={status.isPending}><CheckCircle2 size={17} />Open check-in</Button> : <Button variant="secondary" onClick={() => status.mutate("closed")} busy={status.isPending}>Close check-in</Button>}
           <a className="button button--secondary" href={`/api/v1/admin/meetings/${meeting.id}/qr.svg`}><QrCode size={17} />QR code</a>
           <a className="button button--quiet" href={`/api/v1/admin/meetings/${meeting.id}/export.csv`}><Download size={17} />CSV</a>
@@ -384,22 +410,36 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
         </Modal>
       )}
       {manualCheckin && (
-        <Modal title="Manual check-in" onClose={() => setManualCheckin(false)}>
+        <Modal title={creatingManualProfile ? "Add profile & check in" : "Manual check-in"} onClose={closeManualCheckin}>
           <div className="modal-form">
-            <Field label="Find a profile" name="profile-search" value={profileSearch} onChange={(event) => setProfileSearch(event.target.value)} placeholder="Name or email" autoFocus />
-            {profileSearch.trim().length < 2 && <p className="panel-note">Enter at least two characters to search existing profiles.</p>}
-            {profiles.isError && <div className="form-error">{profiles.error.message}</div>}
-            <div className="manual-profile-list">
-              {profiles.data?.map((profile) => (
-                <button key={profile.id} className="manual-profile-row" disabled={checkIn.isPending} onClick={() => checkIn.mutate(profile.id)}>
-                  <span><strong>{profile.first_name} {profile.last_name}</strong><small>{profile.email}</small></span>
-                  <Plus size={17} />
-                </button>
-              ))}
-              {profileSearch.trim().length >= 2 && profiles.data && !profiles.data.length && <p className="panel-note">No matching profiles found.</p>}
-            </div>
-            {checkIn.isError && <div className="form-error">{checkIn.error.message}</div>}
-            <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setManualCheckin(false)}>Cancel</Button></div>
+            {creatingManualProfile ? (
+              <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); createAndCheckIn.mutate(event.currentTarget); }}>
+                <Field label="First name" name="first_name" required autoFocus />
+                <Field label="Last name" name="last_name" required />
+                <Field label="Email (optional)" name="email" type="email" />
+                <Field label="Phone (optional)" name="phone" type="tel" />
+                {createAndCheckIn.isError && <div className="form-error">{createAndCheckIn.error.message}</div>}
+                <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setCreatingManualProfile(false)}>Back</Button><Button busy={createAndCheckIn.isPending}>Add profile & check in</Button></div>
+              </form>
+            ) : (
+              <>
+                <Field label="Find a profile" name="profile-search" value={profileSearch} onChange={(event) => setProfileSearch(event.target.value)} placeholder="Name or email" autoFocus />
+                {profileSearch.trim().length < 2 && <p className="panel-note">Enter at least two characters to search existing profiles.</p>}
+                {profiles.isError && <div className="form-error">{profiles.error.message}</div>}
+                <div className="manual-profile-list">
+                  {profiles.data?.map((profile) => (
+                    <button key={profile.id} className="manual-profile-row" disabled={checkIn.isPending} onClick={() => checkIn.mutate(profile.id)}>
+                      <span><strong>{profile.first_name} {profile.last_name}</strong><small>{profile.email}</small></span>
+                      <Plus size={17} />
+                    </button>
+                  ))}
+                  {profileSearch.trim().length >= 2 && profiles.data && !profiles.data.length && <p className="panel-note">No matching profiles found.</p>}
+                </div>
+                <Button variant="secondary" className="button--wide" onClick={() => setCreatingManualProfile(true)}><Plus size={17} />Add a new profile & check in</Button>
+                {checkIn.isError && <div className="form-error">{checkIn.error.message}</div>}
+                <div className="modal-actions"><Button variant="secondary" type="button" onClick={closeManualCheckin}>Cancel</Button></div>
+              </>
+            )}
           </div>
         </Modal>
       )}

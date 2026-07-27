@@ -206,6 +206,33 @@ async def test_admin_can_manually_check_in_and_out_profile(app, open_meeting, or
 
 
 @pytest.mark.asyncio
+async def test_admin_can_create_a_profile_during_manual_checkin(app, open_meeting, organizer):
+    _request, response = await app.asgi_client.post(
+        f"/api/v1/admin/meetings/{open_meeting.id}/checkins/new-profile",
+        json={
+            "first_name": "New",
+            "last_name": "Attendee",
+            "email": "new.attendee@example.com",
+            "phone": "(610) 555-0123",
+        },
+        cookies=session_cookie(app, organizer),
+        headers=csrf_headers(),
+    )
+    assert response.status == 201
+    assert response.json["created"] is True
+    assert response.json["profile"]["email"] == "new.attendee@example.com"
+
+    async with app.ctx.db.session() as db:
+        profile = await db.get(Profile, UUID(response.json["profile"]["id"]))
+        checkin = await db.get(Checkin, UUID(response.json["id"]))
+        actions = set((await db.scalars(select(AuditEvent.action))).all())
+        assert profile.phone == "6105550123"
+        assert checkin.profile_id == profile.id
+        assert checkin.source.value == "admin"
+        assert {"profile.created", "checkin.added"} <= actions
+
+
+@pytest.mark.asyncio
 async def test_admin_api_requires_session(app):
     _request, response = await app.asgi_client.get("/api/v1/admin/dashboard")
     assert response.status == 401

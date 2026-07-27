@@ -34,6 +34,7 @@ from .schemas import (
     AdminProfileCreate,
     CorrectionReason,
     ManualCheckin,
+    ManualProfileCheckin,
     MeetingCreate,
     MeetingStatusUpdate,
     MeetingUpdate,
@@ -363,6 +364,67 @@ async def manual_checkin(request: Request, meeting_id: UUID):
             after={"meeting_id": str(meeting_id), "profile_id": str(payload.profile_id)},
         )
         return {"id": str(checkin.id), "created": True}, 201
+
+
+@admin_bp.post("/meetings/<meeting_id:uuid>/checkins/new-profile")
+@admin_required()
+async def create_profile_and_manual_checkin(request: Request, meeting_id: UUID):
+    payload = ManualProfileCheckin.model_validate(request.json or {})
+    email = normalize_email(str(payload.email)) if payload.email else None
+    try:
+        async with request.app.ctx.db.session() as db:
+            if not await db.get(Meeting, meeting_id):
+                raise NotFound("Meeting not found")
+            if email and await db.scalar(
+                select(Profile.id).where(
+                    Profile.normalized_email == email,
+                    Profile.deleted_at.is_(None),
+                )
+            ):
+                raise InvalidUsage("A profile with that email already exists")
+            profile = Profile(
+                first_name=payload.first_name.strip(),
+                last_name=payload.last_name.strip(),
+                email=email,
+                normalized_email=email,
+                phone=normalize_phone(payload.phone),
+                consented_at=datetime.now(UTC),
+            )
+            db.add(profile)
+            await db.flush()
+            checkin = Checkin(
+                meeting_id=meeting_id,
+                profile_id=profile.id,
+                source=CheckinSource.admin,
+                corrected_by_id=request.ctx.organizer.id,
+            )
+            db.add(checkin)
+            await db.flush()
+            await audit(
+                db,
+                request,
+                "profile.created",
+                "profile",
+                profile.id,
+                reason="Created during manual check-in",
+                after=profile_json(profile),
+            )
+            await audit(
+                db,
+                request,
+                "checkin.added",
+                "checkin",
+                checkin.id,
+                reason=payload.reason,
+                after={"meeting_id": str(meeting_id), "profile_id": str(profile.id)},
+            )
+            return {
+                "id": str(checkin.id),
+                "created": True,
+                "profile": profile_json(profile),
+            }, 201
+    except IntegrityError as error:
+        raise InvalidUsage("A profile with that email already exists") from error
 
 
 @admin_bp.delete("/checkins/<checkin_id:uuid>")

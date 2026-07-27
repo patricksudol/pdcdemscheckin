@@ -74,6 +74,14 @@ class ManualCheckin(ApiModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ManualProfileCheckin(AdminProfileCreate):
+    reason: str = Field(
+        default="Created and checked in manually by organizer",
+        min_length=3,
+        max_length=500,
+    )
+
+
 class CorrectionReason(ApiModel):
     reason: str = Field(min_length=3, max_length=500)
 
