@@ -81,6 +81,10 @@ h2 { font-size: 1.8rem; }
 .welcome-orb { margin: 0 auto 1.3rem; width: 62px; height: 62px; display: grid; place-items: center; border-radius: 50%; background: linear-gradient(145deg, #0f4c85, #8c36d6); color: white; font: 400 2rem "League Gothic", Impact, sans-serif; }
 .success__ring { width: 88px; height: 88px; border-radius: 50%; margin: 0 auto 1.5rem; display: grid; place-items: center; background: #e6f5ef; color: var(--green); border: 7px solid #f1faf6; animation: pop .4s ease-out; }
 @keyframes pop { from { transform: scale(.5); opacity: 0; } }
+.success { position: relative; isolation: isolate; overflow: hidden; min-height: 430px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.success::before { content: ""; position: absolute; z-index: -2; inset: -35%; background: conic-gradient(from 205deg, transparent 0deg, rgba(53,121,183,.08) 28deg, transparent 52deg, rgba(255,107,26,.1) 82deg, transparent 112deg, rgba(53,121,183,.08) 155deg, transparent 190deg, rgba(255,181,46,.08) 222deg, transparent 260deg, rgba(53,121,183,.08) 300deg, transparent 340deg); animation: celebration-rays 8s linear infinite; }
+.success::after { content: ""; position: absolute; z-index: -1; width: 28rem; height: 28rem; border: 1px solid rgba(53,121,183,.18); border-radius: 50%; box-shadow: 0 0 0 2rem rgba(53,121,183,.035), 0 0 0 5rem rgba(255,107,26,.025); animation: celebration-ring 3.2s ease-out infinite; }
+.success > * { position: relative; z-index: 1; }
 .phoenix-celebration { position: relative; width: 188px; height: 168px; margin: -2.4rem auto -.5rem; pointer-events: none; animation: phoenix-rise 2.05s cubic-bezier(.16,.8,.28,1) both; }
 .phoenix-celebration::before { content: ""; position: absolute; inset: 16% 8% 2%; border-radius: 50%; background: radial-gradient(circle, rgba(84,184,244,.38), rgba(53,121,183,.14) 44%, transparent 72%); filter: blur(9px); animation: phoenix-aura 1.05s ease-in-out 2 alternate; }
 .phoenix-celebration svg { width: 100%; height: 100%; overflow: visible; }
@@ -101,6 +105,8 @@ h2 { font-size: 1.8rem; }
 @keyframes phoenix-wing-left { to { transform: rotate(-25deg) translate(-.5rem, -.2rem); } }
 @keyframes phoenix-wing-right { to { transform: rotate(25deg) translate(.5rem, -.2rem); } }
 @keyframes phoenix-flames { to { transform: scale(1.18, 1.42) translateY(.5rem) rotate(-2deg); opacity: .72; } }
+@keyframes celebration-rays { to { transform: rotate(360deg); } }
+@keyframes celebration-ring { 0% { opacity: 0; transform: scale(.68); } 22% { opacity: 1; } 100% { opacity: 0; transform: scale(1.2); } }
 .notice-card { grid-column: 1 / -1; max-width: 570px; width: 100%; margin: auto; }
 .empty-state__icon { width: 52px; height: 52px; border-radius: 15px; background: #eaf0f6; color: var(--navy); display: grid; place-items: center; margin: 0 auto 1rem; }
 .skeleton-card div, .admin-skeleton div { height: 18px; border-radius: 8px; margin: 1rem 0; background: linear-gradient(90deg,#edf0f2,#f8f9fa,#edf0f2); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
