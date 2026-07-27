@@ -8,6 +8,7 @@ import {
   Download,
   ExternalLink,
   KeyRound,
+  LogOut,
   Menu,
   Pencil,
   Plus,
@@ -260,6 +261,8 @@ function Meetings() {
 function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [manualCheckin, setManualCheckin] = useState(false);
+  const [profileSearch, setProfileSearch] = useState("");
   const attendance = useQuery({
     queryKey: ["meeting-checkins", meeting.id],
     queryFn: () => api<{ meeting: Meeting; checkins: Checkin[] }>(`/api/v1/admin/meetings/${meeting.id}/checkins`),
@@ -295,6 +298,37 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
       onClose();
     },
   });
+  const profiles = useQuery({
+    queryKey: ["profiles", "manual-checkin", profileSearch],
+    queryFn: () => api<Profile[]>(`/api/v1/admin/profiles?q=${encodeURIComponent(profileSearch)}`),
+    enabled: manualCheckin && profileSearch.trim().length >= 2,
+  });
+  const checkIn = useMutation({
+    mutationFn: (profileId: string) =>
+      api<{ id: string; created: boolean }>(`/api/v1/admin/meetings/${meeting.id}/checkins`, {
+        method: "POST",
+        body: JSON.stringify({ profile_id: profileId, reason: "Checked in manually by organizer" }),
+      }),
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["meeting-checkins", meeting.id] });
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setManualCheckin(false);
+      setProfileSearch("");
+    },
+  });
+  const checkOut = useMutation({
+    mutationFn: (checkinId: string) =>
+      api(`/api/v1/admin/checkins/${checkinId}`, {
+        method: "DELETE",
+        body: JSON.stringify({ reason: "Checked out manually by organizer" }),
+      }),
+    onSuccess() {
+      queryClient.invalidateQueries({ queryKey: ["meeting-checkins", meeting.id] });
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
   const link = `${window.location.origin}/checkin/${meeting.public_token}`;
   const meetingLocalDate = new Date(
     new Date(meeting.starts_at).getTime()
@@ -306,6 +340,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
         <div className="drawer__head"><div><StatusBadge status={meeting.status} /><h2>{meeting.title}</h2><p>{formatMeetingDate(meeting.starts_at)}</p></div><button className="icon-button" onClick={onClose}><X /></button></div>
         <div className="drawer__actions">
           <Button variant="secondary" onClick={() => setEditing(true)}><Pencil size={17} />Edit</Button>
+          <Button variant="secondary" onClick={() => setManualCheckin(true)}><Plus size={17} />Manual check-in</Button>
           {meeting.status !== "open" ? <Button onClick={() => status.mutate("open")} busy={status.isPending}><CheckCircle2 size={17} />Open check-in</Button> : <Button variant="secondary" onClick={() => status.mutate("closed")} busy={status.isPending}>Close check-in</Button>}
           <a className="button button--secondary" href={`/api/v1/admin/meetings/${meeting.id}/qr.svg`}><QrCode size={17} />QR code</a>
           <a className="button button--quiet" href={`/api/v1/admin/meetings/${meeting.id}/export.csv`}><Download size={17} />CSV</a>
@@ -320,7 +355,14 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
             <div key={item.id} className="attendance-row">
               <div className="avatar">{item.profile?.first_name.charAt(0) ?? "—"}</div>
               <span><strong>{item.profile ? `${item.profile.first_name} ${item.profile.last_name}` : item.anonymized_name}</strong><small>{new Date(item.checked_in_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {item.source}</small></span>
-              <CheckCircle2 size={19} />
+              <Button
+                variant="quiet"
+                className="attendance-row__checkout"
+                busy={checkOut.isPending}
+                onClick={() => {
+                  if (window.confirm("Check this attendee out? Their check-in will be removed and recorded in the audit log.")) checkOut.mutate(item.id);
+                }}
+              ><LogOut size={16} />Check out</Button>
             </div>
           ))}
           {!attendance.data?.checkins.length && <EmptyState icon={<ClipboardCheck />} title="No check-ins yet">Open and share the meeting link to begin.</EmptyState>}
@@ -339,6 +381,26 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
             {updateMeeting.isError && <div className="form-error">{updateMeeting.error.message}</div>}
             <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setEditing(false)}>Cancel</Button><Button busy={updateMeeting.isPending}>Save changes</Button></div>
           </form>
+        </Modal>
+      )}
+      {manualCheckin && (
+        <Modal title="Manual check-in" onClose={() => setManualCheckin(false)}>
+          <div className="modal-form">
+            <Field label="Find a profile" name="profile-search" value={profileSearch} onChange={(event) => setProfileSearch(event.target.value)} placeholder="Name or email" autoFocus />
+            {profileSearch.trim().length < 2 && <p className="panel-note">Enter at least two characters to search existing profiles.</p>}
+            {profiles.isError && <div className="form-error">{profiles.error.message}</div>}
+            <div className="manual-profile-list">
+              {profiles.data?.map((profile) => (
+                <button key={profile.id} className="manual-profile-row" disabled={checkIn.isPending} onClick={() => checkIn.mutate(profile.id)}>
+                  <span><strong>{profile.first_name} {profile.last_name}</strong><small>{profile.email}</small></span>
+                  <Plus size={17} />
+                </button>
+              ))}
+              {profileSearch.trim().length >= 2 && profiles.data && !profiles.data.length && <p className="panel-note">No matching profiles found.</p>}
+            </div>
+            {checkIn.isError && <div className="form-error">{checkIn.error.message}</div>}
+            <div className="modal-actions"><Button variant="secondary" type="button" onClick={() => setManualCheckin(false)}>Cancel</Button></div>
+          </div>
         </Modal>
       )}
     </div>

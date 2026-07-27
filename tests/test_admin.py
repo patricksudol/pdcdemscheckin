@@ -148,6 +148,44 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
 
 
 @pytest.mark.asyncio
+async def test_admin_can_manually_check_in_and_out_profile(app, open_meeting, organizer):
+    profile = Profile(
+        first_name="Manual",
+        last_name="Attendee",
+        email="manual@example.com",
+        normalized_email="manual@example.com",
+        consented_at=datetime.now(UTC),
+    )
+    async with app.ctx.db.session() as db:
+        db.add(profile)
+        await db.flush()
+
+    cookies = session_cookie(app, organizer)
+    _request, response = await app.asgi_client.post(
+        f"/api/v1/admin/meetings/{open_meeting.id}/checkins",
+        json={"profile_id": str(profile.id), "reason": "Checked in manually by organizer"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 201
+    checkin_id = response.json["id"]
+
+    _request, response = await app.asgi_client.request(
+        "DELETE",
+        f"/api/v1/admin/checkins/{checkin_id}",
+        json={"reason": "Checked out manually by organizer"},
+        cookies=cookies,
+        headers=csrf_headers(),
+    )
+    assert response.status == 200
+
+    async with app.ctx.db.session() as db:
+        assert await db.get(Checkin, UUID(checkin_id)) is None
+        actions = set((await db.scalars(select(AuditEvent.action))).all())
+        assert {"checkin.added", "checkin.removed"} <= actions
+
+
+@pytest.mark.asyncio
 async def test_admin_api_requires_session(app):
     _request, response = await app.asgi_client.get("/api/v1/admin/dashboard")
     assert response.status == 401

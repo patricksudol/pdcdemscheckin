@@ -179,6 +179,13 @@ h2 { font-size: 1.8rem; }
 .attendance-row strong { font-size: .9rem; }
 .attendance-row small { color: var(--muted); font-size: .73rem; margin-top: .15rem; }
 .attendance-row > svg { color: var(--green); }
+.attendance-row__checkout { margin-left: auto; min-height: 34px; padding: .4rem .55rem; font-size: .72rem; }
+.manual-profile-list { margin-top: .8rem; border: 1px solid #e9edf0; border-radius: 12px; overflow: hidden; }
+.manual-profile-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: .75rem; border: 0; border-bottom: 1px solid #e9edf0; background: white; padding: .8rem .9rem; text-align: left; cursor: pointer; color: var(--navy); }
+.manual-profile-row:last-child { border-bottom: 0; }
+.manual-profile-row:hover:not(:disabled) { background: #f5f7f9; }
+.manual-profile-row span { display: flex; flex-direction: column; gap: .15rem; }
+.manual-profile-row small { color: var(--muted); }
 .search-box { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.4rem; border-bottom: 1px solid #e9edf0; }
 .search-box svg { color: var(--muted); }
 .search-box input { border: 0; outline: 0; flex: 1; font-size: .95rem; }
