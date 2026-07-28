@@ -14,7 +14,9 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column(
         "profiles",
-        sa.Column("committee_person", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column(
+            "committee_person", sa.Boolean(), server_default=sa.text("false"), nullable=False
+        ),
     )
 
 
