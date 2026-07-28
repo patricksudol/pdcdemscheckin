@@ -369,7 +369,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
           <Button variant="secondary" onClick={() => { setCreatingManualProfile(false); setManualCheckin(true); }}><Plus size={17} />Manual check-in</Button>
           {meeting.status !== "open" ? <Button onClick={() => status.mutate("open")} busy={status.isPending}><CheckCircle2 size={17} />Open check-in</Button> : <Button variant="secondary" onClick={() => status.mutate("closed")} busy={status.isPending}>Close check-in</Button>}
           <a className="button button--secondary" href={`/api/v1/admin/meetings/${meeting.id}/qr.svg`}><QrCode size={17} />QR code</a>
-          <a className="button button--quiet" href={`/api/v1/admin/meetings/${meeting.id}/export.csv`}><Download size={17} />CSV</a>
+          <a className="button button--quiet" href={`/api/v1/admin/meetings/${meeting.id}/export.csv`}><Download size={17} />Export check-ins</a>
         </div>
         <div className="share-box">
           <label>Public check-in link</label>

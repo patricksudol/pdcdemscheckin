@@ -239,6 +239,53 @@ async def test_admin_api_requires_session(app):
 
 
 @pytest.mark.asyncio
+async def test_admin_can_export_a_meetings_checked_in_attendees(app, open_meeting, organizer):
+    async with app.ctx.db.session() as db:
+        first = Profile(
+            first_name="Ada",
+            last_name="Lovelace",
+            email="ada@example.com",
+            normalized_email="ada@example.com",
+            phone="6105550100",
+            consented_at=datetime.now(UTC),
+        )
+        second = Profile(
+            first_name="Grace",
+            last_name="Hopper",
+            email="grace@example.com",
+            normalized_email="grace@example.com",
+            consented_at=datetime.now(UTC),
+        )
+        db.add_all([first, second])
+        await db.flush()
+        db.add_all([
+            Checkin(meeting_id=open_meeting.id, profile_id=first.id),
+            Checkin(meeting_id=open_meeting.id, profile_id=second.id),
+        ])
+
+    _request, response = await app.asgi_client.get(
+        f"/api/v1/admin/meetings/{open_meeting.id}/export.csv",
+        cookies=session_cookie(app, organizer),
+    )
+
+    assert response.status == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "attachment" in response.headers["content-disposition"]
+    lines = response.text.splitlines()
+    assert lines[0].startswith("Meeting,Meeting date,First name")
+    assert any("Ada,Lovelace,ada@example.com,6105550100" in line for line in lines)
+    assert any("Grace,Hopper,grace@example.com,," in line for line in lines)
+
+
+@pytest.mark.asyncio
+async def test_meeting_export_requires_admin_session(app, open_meeting):
+    _request, response = await app.asgi_client.get(
+        f"/api/v1/admin/meetings/{open_meeting.id}/export.csv"
+    )
+    assert response.status == 401
+
+
+@pytest.mark.asyncio
 async def test_organizer_can_sign_in_with_password(app, organizer):
     _request, response = await app.asgi_client.post(
         "/api/v1/auth/login",
