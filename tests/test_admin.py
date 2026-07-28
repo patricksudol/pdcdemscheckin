@@ -100,6 +100,7 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
             "first_name": "Taylor",
             "last_name": "Example",
             "phone": "(610) 555-0100",
+            "committee_person": True,
         },
         cookies=cookies,
         headers=csrf_headers(),
@@ -108,6 +109,7 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
     profile_id = response.json["id"]
     profile_uuid = UUID(profile_id)
     assert response.json["email"] is None
+    assert response.json["committee_person"] is True
 
     _request, response = await app.asgi_client.patch(
         f"/api/v1/admin/profiles/{profile_id}",
@@ -145,6 +147,7 @@ async def test_admin_can_create_edit_and_delete_profile(app, open_meeting, organ
     assert response.status == 200
     listed_profile = next(profile for profile in response.json if profile["id"] == profile_id)
     assert listed_profile["meeting_count"] == 1
+    assert listed_profile["committee_person"] is True
     assert listed_profile["last_meeting_at"].startswith("2026-07-27T23:00:00")
 
     _request, response = await app.asgi_client.request(

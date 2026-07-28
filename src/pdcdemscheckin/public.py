@@ -116,6 +116,7 @@ async def lookup_profile(request: Request, token: str):
             "last_name": profile.last_name,
             "email": profile.email,
             "phone": profile.phone,
+            "committee_person": profile.committee_person,
             "already_checked_in": existing is not None,
         }
 
@@ -163,6 +164,7 @@ async def checkin_existing(request: Request, token: str):
                 value = normalize_phone(value)
             setattr(profile, field, value)
         profile_first_name = profile.first_name
+        profile_committee_person = profile.committee_person
         try:
             await db.flush()
         except IntegrityError as error:
@@ -175,7 +177,12 @@ async def checkin_existing(request: Request, token: str):
         except IntegrityError:
             await db.rollback()
             created = False
-        return {"checked_in": True, "created": created, "first_name": profile_first_name}
+        return {
+            "checked_in": True,
+            "created": created,
+            "first_name": profile_first_name,
+            "committee_person": profile_committee_person,
+        }
 
 
 @public_bp.post("/meetings/<token:str>/profiles")
@@ -213,4 +220,5 @@ async def create_profile_and_checkin(request: Request, token: str):
             "created": True,
             "profile_id": str(profile.id),
             "first_name": profile.first_name,
+            "committee_person": profile.committee_person,
         }, 201

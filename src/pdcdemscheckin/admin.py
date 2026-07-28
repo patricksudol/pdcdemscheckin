@@ -55,6 +55,7 @@ def profile_json(profile: Profile) -> dict[str, Any]:
         "last_name": profile.last_name,
         "email": profile.email,
         "phone": profile.phone,
+        "committee_person": profile.committee_person,
         "consented_at": profile.consented_at.isoformat(),
         "created_at": profile.created_at.isoformat(),
         "deleted_at": profile.deleted_at.isoformat() if profile.deleted_at else None,
@@ -519,6 +520,7 @@ async def create_profile(request: Request):
                 email=email,
                 normalized_email=email,
                 phone=phone,
+                committee_person=payload.committee_person,
                 consented_at=datetime.now(UTC),
             )
             db.add(profile)
@@ -1000,6 +1002,7 @@ async def export_meeting(request: Request, meeting_id: UUID):
                 "Last name",
                 "Email",
                 "Phone",
+                "Committee person",
                 "Check-in time",
                 "Source",
             ]
@@ -1013,6 +1016,7 @@ async def export_meeting(request: Request, meeting_id: UUID):
                     safe_csv(profile.last_name if profile else "Attendee"),
                     safe_csv(profile.email if profile else ""),
                     safe_csv(profile.phone if profile else ""),
+                    safe_csv("Yes" if profile and profile.committee_person else "No"),
                     checkin.checked_in_at.isoformat(),
                     checkin.source.value,
                 ]

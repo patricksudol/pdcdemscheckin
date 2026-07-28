@@ -31,7 +31,7 @@ import {
   Profile,
   setCsrfToken,
 } from "./api";
-import { Brand, Button, EmptyState, Field, StatusBadge } from "./components";
+import { Brand, Button, CommitteePersonBadge, EmptyState, Field, StatusBadge } from "./components";
 
 interface Me {
   id: string;
@@ -429,7 +429,7 @@ function MeetingDrawer({ meeting, onClose }: { meeting: Meeting; onClose: () => 
                 <div className="manual-profile-list">
                   {profiles.data?.map((profile) => (
                     <button key={profile.id} className="manual-profile-row" disabled={checkIn.isPending} onClick={() => checkIn.mutate(profile.id)}>
-                      <span><strong>{profile.first_name} {profile.last_name}</strong><small>{profile.email}</small></span>
+                      <span><strong>{profile.first_name} {profile.last_name} {profile.committee_person && <CommitteePersonBadge />}</strong><small>{profile.email}</small></span>
                       <Plus size={17} />
                     </button>
                   ))}
@@ -467,6 +467,7 @@ function Profiles() {
           last_name: data.get("last_name"),
           email: data.get("email"),
           phone: data.get("phone") || null,
+          committee_person: data.get("committee_person") === "on",
         }),
       });
     },
@@ -519,7 +520,7 @@ function Profiles() {
           </div>
           {sortedProfiles.map((profile) => (
             <button className="profile-table__row profile-table__row--button" key={profile.id} onClick={() => setSelected(profile)}>
-              <span><div className="avatar">{profile.first_name.charAt(0)}</div><strong>{profile.first_name} {profile.last_name}</strong></span>
+              <span><div className="avatar">{profile.first_name.charAt(0)}</div><strong>{profile.first_name} {profile.last_name} {profile.committee_person && <CommitteePersonBadge />}</strong></span>
               <span>{profile.email || "—"}</span><span>{profile.phone || "—"}</span>
               <span>{profile.last_meeting_at ? new Date(profile.last_meeting_at).toLocaleDateString() : "—"}</span>
               <span>{profile.meeting_count ?? 0}</span>
@@ -566,6 +567,10 @@ function ProfileForm({
       <Field label="Last name" name="last_name" defaultValue={profile?.last_name ?? ""} required />
       <Field label="Email (optional)" name="email" type="email" defaultValue={profile?.email ?? ""} />
       <Field label="Phone (optional)" name="phone" type="tel" defaultValue={profile?.phone ?? ""} />
+      <label className="consent committee-checkbox field--full">
+        <input type="checkbox" name="committee_person" defaultChecked={profile?.committee_person ?? false} />
+        <span><CommitteePersonBadge /> <strong>Committee Person</strong><small>Show a gold star for this profile.</small></span>
+      </label>
       {error && <div className="form-error">{error}</div>}
       <div className="modal-actions"><Button variant="secondary" type="button" onClick={onCancel}>Cancel</Button><Button busy={busy}>{submitLabel}</Button></div>
     </form>
@@ -590,6 +595,7 @@ function ProfileEditor({ profile, onClose }: { profile: Profile; onClose: () => 
           last_name: data.get("last_name"),
           email: data.get("email"),
           phone: data.get("phone") || null,
+          committee_person: data.get("committee_person") === "on",
         }),
       });
     },

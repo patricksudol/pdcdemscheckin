@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { api, formatMeetingDate, Meeting } from "./api";
-import { Brand, Button, Field } from "./components";
+import { Brand, Button, CommitteePersonBadge, Field } from "./components";
 
 type Step = "email" | "returning" | "update" | "new" | "done";
 
@@ -25,6 +25,7 @@ export function CheckinPage({ token }: { token: string }) {
   const [profileEmail, setProfileEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
+  const [committeePerson, setCommitteePerson] = useState(false);
 
   const meeting = useQuery({
     queryKey: ["public-meeting", token],
@@ -40,6 +41,7 @@ export function CheckinPage({ token }: { token: string }) {
         last_name?: string;
         email?: string;
         phone?: string | null;
+        committee_person?: boolean;
         already_checked_in?: boolean;
       }>(
         `/api/v1/public/meetings/${token}/lookup`,
@@ -51,6 +53,7 @@ export function CheckinPage({ token }: { token: string }) {
         setLastName(data.last_name ?? "");
         setProfileEmail(data.email ?? email);
         setPhone(data.phone ?? "");
+        setCommitteePerson(Boolean(data.committee_person));
         setAlreadyCheckedIn(Boolean(data.already_checked_in));
         setStep(data.already_checked_in ? "done" : "returning");
       } else {
@@ -61,12 +64,13 @@ export function CheckinPage({ token }: { token: string }) {
 
   const returning = useMutation({
     mutationFn: (updates: Record<string, string | null> = {}) =>
-      api<{ first_name: string }>(`/api/v1/public/meetings/${token}/checkins`, {
+      api<{ first_name: string; committee_person: boolean }>(`/api/v1/public/meetings/${token}/checkins`, {
         method: "POST",
         body: JSON.stringify({ email, ...updates }),
       }),
     onSuccess(data) {
       setFirstName(data.first_name);
+      setCommitteePerson(data.committee_person);
       setStep("done");
     },
   });
@@ -74,7 +78,7 @@ export function CheckinPage({ token }: { token: string }) {
   const create = useMutation({
     mutationFn: (form: HTMLFormElement) => {
       const data = new FormData(form);
-      return api<{ first_name: string }>(`/api/v1/public/meetings/${token}/profiles`, {
+      return api<{ first_name: string; committee_person: boolean }>(`/api/v1/public/meetings/${token}/profiles`, {
         method: "POST",
         body: JSON.stringify({
           first_name: data.get("first_name"),
@@ -87,6 +91,7 @@ export function CheckinPage({ token }: { token: string }) {
     },
     onSuccess(data) {
       setFirstName(data.first_name);
+      setCommitteePerson(data.committee_person);
       setStep("done");
     },
   });
@@ -175,7 +180,7 @@ export function CheckinPage({ token }: { token: string }) {
           <>
             <div className="welcome-orb">{firstName.charAt(0).toUpperCase()}</div>
             <div className="step-label">We found your profile</div>
-            <h1>Welcome back, {firstName}.</h1>
+            <h1>Welcome back, {firstName}. {committeePerson && <CommitteePersonBadge />}</h1>
             <p className="lede">Ready to mark yourself present for this meeting?</p>
             <ErrorMessage mutation={returning} />
             <Button
@@ -197,7 +202,7 @@ export function CheckinPage({ token }: { token: string }) {
         {step === "update" && (
           <>
             <div className="step-label">Update your profile</div>
-            <h1>Is your information still right?</h1>
+            <h1>Is your information still right? {committeePerson && <CommitteePersonBadge />}</h1>
             <p className="lede">Update your contact information, then we’ll check you in.</p>
             <form
               className="form-grid"
@@ -270,7 +275,7 @@ export function CheckinPage({ token }: { token: string }) {
             {!alreadyCheckedIn && <PhoenixCelebration />}
             <div className="success__ring"><Check size={38} strokeWidth={3} /></div>
             <div className="step-label">{alreadyCheckedIn ? "Already recorded" : "You’re checked in"}</div>
-            <h1>{alreadyCheckedIn ? `You’re all set, ${firstName}.` : `Thanks for being here, ${firstName}!`}</h1>
+            <h1>{alreadyCheckedIn ? `You’re all set, ${firstName}.` : `Thanks for being here, ${firstName}!`} {committeePerson && <CommitteePersonBadge />}</h1>
             <p className="lede">
               {alreadyCheckedIn
                 ? "We already have your attendance for this meeting."

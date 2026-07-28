@@ -245,6 +245,9 @@ h2 { font-size: 1.8rem; }
 .profile-table__row--button { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .profile-table__row--button:hover { background: #f7f9fa; }
 .profile-table__row > span:first-child { display: flex; align-items: center; gap: .65rem; color: #203148; }
+.committee-star { display: inline-flex; vertical-align: middle; color: #c58a18; margin-left: .25rem; }
+.committee-checkbox > span { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; }
+.committee-checkbox > span small { flex-basis: 100%; margin-left: 1.7rem; }
 .danger-zone { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #edf0f2; }
 .profile-history { padding: 1.2rem 1.5rem 0; }
 .profile-history__stats { display: flex; gap: .7rem; }

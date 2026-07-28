@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Star } from "lucide-react";
 import pdcLogoUrl from "./assets/pdc-logo.jpeg";
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -71,4 +71,12 @@ export function EmptyState({
 
 export function StatusBadge({ status }: { status: string }) {
   return <span className={`status status--${status}`}>{status}</span>;
+}
+
+export function CommitteePersonBadge() {
+  return (
+    <span className="committee-star" title="Committee Person" aria-label="Committee Person">
+      <Star size={16} fill="currentColor" strokeWidth={2.5} />
+    </span>
+  );
 }

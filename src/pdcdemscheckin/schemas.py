@@ -60,6 +60,7 @@ class ProfileUpdate(ApiModel):
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=30)
+    committee_person: bool | None = None
 
 
 class AdminProfileCreate(ApiModel):
@@ -67,6 +68,7 @@ class AdminProfileCreate(ApiModel):
     last_name: str = Field(min_length=1, max_length=100)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=30)
+    committee_person: bool = False
 
 
 class ManualCheckin(ApiModel):

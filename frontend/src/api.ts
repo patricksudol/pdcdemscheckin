@@ -17,6 +17,7 @@ export interface Profile {
   last_name: string;
   email: string | null;
   phone: string | null;
+  committee_person: boolean;
   consented_at: string;
   created_at: string;
   meeting_count?: number;

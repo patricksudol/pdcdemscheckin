@@ -45,6 +45,7 @@ async def test_new_profile_then_returning_checkin_is_idempotent(app, open_meetin
         "last_name": "Lovelace",
         "email": "ada@example.com",
         "phone": "6105551212",
+        "committee_person": False,
         "already_checked_in": True,
     }
 
@@ -95,6 +96,35 @@ async def test_returning_attendee_can_update_profile_while_checking_in(app, open
         assert profile.email == "ada.lovelace@example.com"
         assert profile.normalized_email == "ada.lovelace@example.com"
         assert profile.phone == "6105551212"
+
+
+@pytest.mark.asyncio
+async def test_committee_person_flag_is_visible_to_attendee(app, open_meeting):
+    async with app.ctx.db.session() as db:
+        profile = Profile(
+            first_name="Committee",
+            last_name="Person",
+            email="committee@example.com",
+            normalized_email="committee@example.com",
+            committee_person=True,
+            consented_at=datetime.now(UTC),
+        )
+        db.add(profile)
+        await db.flush()
+
+    _request, lookup = await app.asgi_client.post(
+        f"/api/v1/public/meetings/{open_meeting.public_token}/lookup",
+        json={"email": "committee@example.com"},
+    )
+    assert lookup.status == 200
+    assert lookup.json["committee_person"] is True
+
+    _request, checkin = await app.asgi_client.post(
+        f"/api/v1/public/meetings/{open_meeting.public_token}/checkins",
+        json={"email": "committee@example.com"},
+    )
+    assert checkin.status == 200
+    assert checkin.json["committee_person"] is True
 
 
 @pytest.mark.asyncio

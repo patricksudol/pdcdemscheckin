@@ -54,6 +54,9 @@ class Profile(Base):
     email: Mapped[str | None] = mapped_column(String(320))
     normalized_email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True)
     phone: Mapped[str | None] = mapped_column(String(30))
+    committee_person: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false")
+    )
     consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
