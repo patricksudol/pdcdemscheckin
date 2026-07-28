@@ -19,7 +19,7 @@ services:
           name: pdcdemscheckin-db
           property: connectionString
       - key: PDC_PUBLIC_BASE_URL
-        value: https://checkins.phoenixvilledems.org
+        value: https://pdcdemscheckin.onrender.com
       - key: PDC_SESSION_SECRET
         generateValue: true
       - key: PDC_SECURE_COOKIES

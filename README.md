@@ -273,8 +273,8 @@ Render is the primary production target. The checked-in `render.yaml` Blueprint 
 6. In Wix DNS, point the `checkins` CNAME to the hostname Render supplies and verify the custom
    domain in Render.
 
-The target URL is `https://checkins.phoenixvilledems.org`. Wix should link its **Check In** menu
-item to that URL; the app intentionally prevents iframe embedding.
+The Render target URL is `https://pdcdemscheckin.onrender.com`. Wix should link its **Check In**
+menu item to that URL; the app intentionally prevents iframe embedding.
 
 Production settings are validated at startup. Production refuses to run with SQLite, HTTP, an
 insecure cookie, or a short/default session secret. Render's `postgresql://` connection string is
